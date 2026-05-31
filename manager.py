@@ -334,9 +334,12 @@ class App:
                 text=True, encoding="utf-8", bufsize=1,
             )
 
+            last_activity = [_time.time()]
+
             def read_progress():
                 for raw in iter(proc.stderr.readline, ""):
                     line = raw.strip()
+                    last_activity[0] = _time.time()
                     if line.startswith("STEP "):
                         msg = line[5:]
                         self.root.after(0, lambda m=msg:
@@ -354,9 +357,36 @@ class App:
                         except Exception:
                             pass
 
-            t = threading.Thread(target=read_progress, daemon=True)
-            t.start()
-            stdout, _ = proc.communicate(timeout=600)
+            stdout_chunks = []
+            def read_stdout():
+                try:
+                    for chunk in iter(proc.stdout.readline, ""):
+                        stdout_chunks.append(chunk)
+                except Exception:
+                    pass
+
+            t_err = threading.Thread(target=read_progress, daemon=True)
+            t_out = threading.Thread(target=read_stdout, daemon=True)
+            t_err.start(); t_out.start()
+
+            # Watchdog d'inactivité (30 min de silence = bloqué)
+            INACTIVITY_LIMIT = 1800
+            killed = False
+            while proc.poll() is None:
+                _time.sleep(2)
+                if _time.time() - last_activity[0] > INACTIVITY_LIMIT:
+                    killed = True
+                    try: proc.kill()
+                    except Exception: pass
+                    break
+            t_out.join(timeout=5); t_err.join(timeout=5)
+
+            if killed:
+                self.root.after(0, lambda: self._show_evaluator_result(
+                    {"error": f"Aucune activité pendant {INACTIVITY_LIMIT//60} min — arrêté."}))
+                return
+
+            stdout = "".join(stdout_chunks)
             result = json.loads(stdout.strip()) if stdout.strip() else {"error": "no output"}
             self.root.after(0, lambda r=result: self._show_evaluator_result(r))
         except Exception as e:
@@ -973,23 +1003,81 @@ class App:
         self._update_preview_ref(ref)
 
         import time as _time
+        cap_mode = self.captioner_mode.get() if hasattr(self, "captioner_mode") else "wd14"
+
+        # Compte les images pour informer l'utilisateur en amont
+        exts = (".png", ".jpg", ".jpeg", ".webp")
+        try:
+            n_imgs = sum(1 for f in Path(folder).iterdir()
+                         if f.is_file() and f.suffix.lower() in exts)
+        except Exception:
+            n_imgs = 0
+
+        # Avertissement si combinaison lente (JoyCaption sur CPU + beaucoup d'images)
+        if cap_mode in ("joycaption", "all") and n_imgs >= 40:
+            ok = messagebox.askyesno(
+                "Analyse potentiellement longue",
+                f"{n_imgs} images avec captions « {cap_mode} ».\n\n"
+                f"JoyCaption est LENT sur CPU (~2 min/image) — ça peut prendre "
+                f"des heures sans GPU. Sur GPU c'est ~30 s/image.\n\n"
+                f"💡 Astuce : lance d'abord en « WD14 tags » (rapide) pour valider "
+                f"le dataset, puis relance en JoyCaption seulement sur les photos gardées "
+                f"(le cache évite de tout refaire).\n\n"
+                f"Continuer quand même ?"
+            )
+            if not ok:
+                return
+
         self.analyzer_tree.delete(*self.analyzer_tree.get_children())
         self.analyzer_summary.config(text="", fg=TEXT_DIM)
         self.analyzer_progress.config(value=0, mode="indeterminate")
         self.analyzer_progress.start(15)
-        self.analyzer_phase.config(text="⚙ Chargement insightface (~5-10s)...", fg=ACCENT)
+        self.analyzer_phase.config(text="⚙ Démarrage du moteur d'analyse…", fg=ACCENT)
         self.analyzer_percent.config(text="")
         self.analyzer_eta.config(text="")
         self.analyzer_status.config(text="")
         self.analyzer_error_frame.pack_forget()  # Cache l'erreur si visible
         self.analyzer_error_text.delete("1.0", "end")
         self._analyzer_start_time = _time.time()
+        self._analyzer_last_activity = _time.time()
         self._analyzer_total = 0
+        self._analyzer_phase_label = "Démarrage du moteur d'analyse"
+        self._analyzer_running = True
         self._analyzer_stderr_buffer = []
         self.root.update_idletasks()
 
-        cap_mode = self.captioner_mode.get() if hasattr(self, "captioner_mode") else "wd14"
+        # Démarre le ticker d'activité (montre que ça vit pendant le chargement)
+        self._analyzer_tick()
+
         threading.Thread(target=self._analyze_subprocess, args=(folder, ref, cap_mode), daemon=True).start()
+
+    def _analyzer_tick(self):
+        """Tick chaque seconde : affiche le temps écoulé tant que l'analyse tourne
+        et qu'on est encore en phase de chargement (avant la ligne TOTAL)."""
+        import time as _time
+        if not getattr(self, "_analyzer_running", False):
+            return
+        elapsed = int(_time.time() - self._analyzer_start_time)
+        m, s = divmod(elapsed, 60)
+        elapsed_str = f"{m}m{s:02d}s" if m else f"{s}s"
+
+        # Tant qu'on n'a pas reçu TOTAL, on est en chargement modèles
+        if self._analyzer_total == 0:
+            since_activity = int(_time.time() - self._analyzer_last_activity)
+            hint = ""
+            if elapsed > 25:
+                hint = "  (1er lancement : téléchargement des modèles, peut prendre plusieurs minutes…)"
+            self.analyzer_phase.config(
+                text=f"⚙ {self._analyzer_phase_label} — {elapsed_str}{hint}", fg=ACCENT)
+            # Indicateur d'activité du sous-processus
+            if since_activity > 3:
+                self.analyzer_status.config(
+                    text=f"⏳ travail en cours… (dernier signe d'activité il y a {since_activity}s)",
+                    fg=TEXT_DIM)
+            else:
+                self.analyzer_status.config(text="⏳ chargement…", fg=TEXT_DIM)
+        # Reprogramme
+        self.root.after(1000, self._analyzer_tick)
 
     def _analyze_subprocess(self, folder, ref="", cap_mode="wd14"):
         import time as _time
@@ -1015,9 +1103,10 @@ class App:
                 for raw_line in iter(proc.stderr.readline, ""):
                     line = raw_line.strip()
                     self._analyzer_stderr_buffer.append(raw_line)  # Capture TOUT pour crash report
+                    self._analyzer_last_activity = _time.time()  # tout signe de vie compte
                     if line.startswith("TOTAL "):
                         total = int(line.split()[1])
-                        self._analyzer_total = total
+                        self._analyzer_total = total  # coupe le mode "chargement" du ticker
                         self.root.after(0, lambda t=total: (
                             self.analyzer_progress.stop(),
                             self.analyzer_progress.config(mode="determinate", maximum=t, value=0),
@@ -1062,6 +1151,8 @@ class App:
                             pass
                     elif line.startswith("STEP "):
                         msg = line[5:]
+                        # Mémorise pour le ticker (qui ajoute le temps écoulé)
+                        self._analyzer_phase_label = msg
                         self.root.after(0, lambda m=msg: self.analyzer_phase.config(text=f"⚙ {m}", fg=ACCENT))
                     elif line.startswith("PROGRESS_DONE"):
                         self.root.after(0, lambda: (
@@ -1069,13 +1160,53 @@ class App:
                             self.analyzer_status.config(text="")
                         ))
 
-            t = threading.Thread(target=read_progress, daemon=True)
-            t.start()
+            # Lit stdout dans son propre thread (sinon communicate() entre en
+            # conflit avec read_progress() qui lit deja stderr)
+            stdout_chunks = []
+            def read_stdout():
+                try:
+                    for chunk in iter(proc.stdout.readline, ""):
+                        stdout_chunks.append(chunk)
+                except Exception:
+                    pass
 
-            stdout_data, _ = proc.communicate(timeout=600)
-            t.join(timeout=2)
+            t_err = threading.Thread(target=read_progress, daemon=True)
+            t_out = threading.Thread(target=read_stdout, daemon=True)
+            t_err.start()
+            t_out.start()
 
-            if proc.returncode != 0:
+            # Watchdog d'INACTIVITE plutot qu'un timeout total : on ne tue le
+            # process QUE s'il ne donne plus aucun signe de vie pendant longtemps.
+            # Une analyse JoyCaption de 200 photos sur CPU peut durer des heures,
+            # mais elle emet en continu des lignes PROGRESS/PREVIEW.
+            INACTIVITY_LIMIT = 1800  # 30 min de silence total = vraiment bloque
+            killed_for_inactivity = False
+            while proc.poll() is None:
+                _time.sleep(2)
+                silence = _time.time() - self._analyzer_last_activity
+                if silence > INACTIVITY_LIMIT:
+                    killed_for_inactivity = True
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    break
+
+            # Laisse les lecteurs finir de vider les pipes
+            t_out.join(timeout=5)
+            t_err.join(timeout=5)
+            self._analyzer_running = False
+
+            if killed_for_inactivity:
+                full = "".join(self._analyzer_stderr_buffer)
+                self.root.after(0, lambda: self._analyzer_done_error(
+                    f"Aucune activité pendant {INACTIVITY_LIMIT//60} min — process arrêté. "
+                    f"Le modèle est peut-être resté bloqué au téléchargement.", full))
+                return
+
+            stdout_data = "".join(stdout_chunks)
+
+            if proc.returncode not in (0, None):
                 full_stderr = "".join(self._analyzer_stderr_buffer)
                 self.root.after(0, lambda: self._analyzer_done_error(
                     f"Le script Python a quitte avec le code {proc.returncode}", full_stderr))
@@ -1093,15 +1224,14 @@ class App:
                 self.root.after(0, lambda: self._analyzer_done_error(str(data["error"]), full))
                 return
             self.root.after(0, lambda: self._show_analyzer_result(data))
-        except subprocess.TimeoutExpired:
-            full = "".join(self._analyzer_stderr_buffer)
-            self.root.after(0, lambda: self._analyzer_done_error("Timeout (>10 min)", full))
         except Exception as e:
             import traceback
+            self._analyzer_running = False
             full = "".join(self._analyzer_stderr_buffer) + "\n\n--- TRACEBACK GUI ---\n" + traceback.format_exc()
             self.root.after(0, lambda: self._analyzer_done_error(str(e), full))
 
     def _analyzer_done_error(self, msg, full_details=""):
+        self._analyzer_running = False  # stoppe le ticker
         self.analyzer_progress.stop()
         self.analyzer_progress.config(mode="determinate", value=0)
         self.analyzer_phase.config(text=f"❌ Echec : {msg[:100]}", fg=RED)
@@ -1161,6 +1291,7 @@ class App:
 
     def _show_analyzer_result(self, data):
         import time as _time
+        self._analyzer_running = False  # stoppe le ticker
         # Finalise la barre
         self.analyzer_progress.stop()
         try:

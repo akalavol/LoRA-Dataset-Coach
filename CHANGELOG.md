@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.3] — 2026-05-31
+
+### Fixed
+- **Removed the hard 10-minute timeout** that killed analyses of large
+  datasets (e.g. 200 photos) even while they were still progressing.
+  Replaced with an **inactivity watchdog**: the subprocess is only killed
+  after 30 minutes of complete silence (downloads emit progress to stderr,
+  so they keep it alive). Applied to both the analyzer and the LoRA evaluator.
+- Fixed a latent race where `communicate()` and the progress thread both
+  read the subprocess stderr. stdout and stderr are now each read by their
+  own dedicated thread.
+
+### Added
+- **Live activity ticker during model loading.** The phase line now shows
+  elapsed time (`⚙ Loading… — 12s`) and, after 25s, a hint that first-run
+  model downloads can take several minutes. A secondary line shows the time
+  since the last sign of activity, so the app never looks frozen.
+- More granular `STEP` messages in the engine: image count, library import,
+  face-model loading, "model ready".
+- **Pre-flight warning** when launching JoyCaption / All captioning on 40+
+  images: estimates the cost and suggests running WD14 first (fast) then
+  JoyCaption on the kept photos (cache avoids redoing work).
+
+---
+
 ## [v1.0.2] — 2026-05-31
 
 ### Removed

@@ -294,6 +294,8 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
     if not images:
         return {"error": "Aucune image .png/.jpg/.jpeg/.webp trouvee."}
 
+    print(f"STEP {len(images)} image(s) trouvée(s) — import des librairies (torch/insightface)...",
+          file=sys.stderr, flush=True)
     # Import lourd ici (pour pouvoir retourner l'erreur avant si folder vide)
     try:
         import numpy as np
@@ -323,6 +325,8 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                      "ou copie les .onnx manuellement."
         }
 
+    print("STEP Chargement du modèle de détection de visage (insightface antelopev2)...",
+          file=sys.stderr, flush=True)
     try:
         # Redirige les prints d'insightface vers stderr pour pas polluer le JSON
         with redirect_stdout_to_stderr():
@@ -330,6 +334,7 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                               root=insight_root,
                               providers=["CPUExecutionProvider"])
             app.prepare(ctx_id=0, det_size=(640, 640))
+        print("STEP Modèle visage prêt.", file=sys.stderr, flush=True)
     except Exception as e:
         import traceback
         return {"error": f"Init insightface ({insight_root}) : {e}\n\n{traceback.format_exc()[-500:]}"}
