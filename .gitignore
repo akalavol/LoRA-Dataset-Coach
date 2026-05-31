@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# Local config (user-specific paths)
+config.json
+config.local.json
+
+# Update artifacts
+_update_tmp/
+_backup_before_update/
+
+# Cache files generated in datasets
+.analyzer_cache.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test outputs
+test_err.txt
+*.log
+
+# Generated artifacts
+output/
+outputs/
+_rejected/
+_a_upscaler/
+targeted_workflows/
+
+# Downloaded models (should be fetched separately)
+models/
+*.onnx
+*.safetensors
+*.pth
+*.bin
+
+# But keep model placeholders / config
+!models/.gitkeep

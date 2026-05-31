@@ -1,0 +1,35 @@
+# LoRA-Dataset-Coach - Python dependencies
+# Core dependencies are listed here. Some heavy models (JoyCaption, Florence-2,
+# RMBG-1.4) are auto-downloaded on first use via huggingface_hub.
+
+# === Core (required) ===
+numpy>=1.24
+Pillow>=10.0
+opencv-python>=4.8
+fpdf2>=2.7              # PDF export
+
+# === Face detection / embeddings ===
+insightface>=0.7        # antelopev2 face analysis
+onnxruntime>=1.16       # WD14 tagger + sdxl-detector
+huggingface_hub>=0.20   # auto-download models
+
+# === Captioning / vision-language models ===
+torch>=2.1              # PyTorch (CUDA strongly recommended)
+torchvision>=0.16
+transformers>=4.45      # JoyCaption needs >= 4.45 for LLaVA
+accelerate>=0.30        # for JoyCaption / Florence-2
+
+# === Optional but recommended ===
+bitsandbytes>=0.42      # INT4 quantization for JoyCaption
+sentencepiece>=0.1.99   # tokenizers
+einops>=0.7             # used by some captioners
+
+# === Heavy model checkpoints (auto-downloaded at first use) ===
+# - WD14-MOAT  : ~330 MB (ONNX)
+# - Florence-2-base : ~540 MB
+# - JoyCaption Beta One : ~4 GB INT4 / ~8 GB BF16
+# - sdxl-detector : ~350 MB
+# - RMBG-1.4 : ~176 MB
+
+# === C2PA / metadata (optional) ===
+# c2pa-python>=0.5   # uncomment if you want C2PA signed manifests support
