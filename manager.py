@@ -1042,12 +1042,15 @@ class App:
             ok = messagebox.askyesno(
                 "Analyse potentiellement longue",
                 f"{n_imgs} images avec captions « {cap_mode} ».\n\n"
-                f"JoyCaption est LENT sur CPU (~2 min/image) — ça peut prendre "
-                f"des heures sans GPU. Sur GPU c'est ~30 s/image.\n\n"
-                f"💡 Astuce : lance d'abord en « WD14 tags » (rapide) pour valider "
-                f"le dataset, puis relance en JoyCaption seulement sur les photos gardées "
-                f"(le cache évite de tout refaire).\n\n"
-                f"Continuer quand même ?"
+                f"⚙ Bonne nouvelle : les captions naturelles (JoyCaption/Florence) "
+                f"ne sont générées QUE sur les photos jugées viables — les ratés "
+                f"(floues, mauvaise personne, duplicates) sont ignorés.\n\n"
+                f"JoyCaption reste LENT sur CPU (~2 min/image), rapide sur GPU "
+                f"(~30 s/image). Si beaucoup de photos sont viables, ça peut "
+                f"quand même être long sans GPU.\n\n"
+                f"💡 Astuce : règle le device sur GPU dans ⚙ Config si ce n'est "
+                f"pas déjà fait.\n\n"
+                f"Continuer ?"
             )
             if not ok:
                 return

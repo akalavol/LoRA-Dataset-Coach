@@ -802,30 +802,9 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                 except Exception as e:
                     entry["wd14_error"] = str(e)[:80]
 
-            # ===== Florence-2 captioning (fallback / compat) =====
-            if florence is not None:
-                try:
-                    with redirect_stdout_to_stderr():
-                        nat_caption = florence.caption(pil_img)
-                    entry["natural_caption"] = nat_caption
-                    # On ecrit .nat.txt pour ne pas ecraser le WD14
-                    nat_path = img_path.with_suffix(".nat.txt")
-                    nat_path.write_text(nat_caption, encoding="utf-8")
-                except Exception as e:
-                    entry["florence_error"] = str(e)[:80]
-
-            # ===== JoyCaption Beta One (STANDARD 2026) =====
-            if joycap is not None:
-                try:
-                    with redirect_stdout_to_stderr():
-                        joy_caption = joycap.caption(pil_img)
-                    entry["joycaption"] = joy_caption
-                    joy_path = img_path.with_suffix(".joy.txt")
-                    joy_path.write_text(joy_caption, encoding="utf-8")
-                    if captioner_mode == "joycaption":
-                        entry["natural_caption"] = joy_caption
-                except Exception as e:
-                    entry["joycaption_error"] = str(e)[:80]
+            # NB : Florence-2 / JoyCaption (captions naturelles, LENTES) ne sont
+            # PAS lancés ici. Ils tournent en PHASE 2, uniquement sur les photos
+            # jugées viables (gros gain : on ne caption pas les ratés).
 
             # ===== Detection IA (sdxl-detector) =====
             if ai_detector is not None:
@@ -1105,6 +1084,93 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
 
         r["lora_viable"] = viable
         r["lora_reason"] = ", ".join(reasons) if reasons else "OK pour LoRA"
+
+    # ===== PHASE 2 : captions naturelles (LENTES) sur les VIABLES uniquement =====
+    # On ne lance Florence/JoyCaption que sur les photos jugées viables/borderline,
+    # ce qui évite de gaspiller des minutes sur des photos qui seront jetées.
+    if florence is not None or joycap is not None:
+        from PIL import Image as _ImgP2
+        pending = []
+        for r in results:
+            if r.get("error"):
+                continue
+            if r.get("lora_viable") not in ("yes", "borderline"):
+                continue
+            need = False
+            if joycap is not None and not r.get("joycaption"):
+                need = True
+            if florence is not None and not r.get("natural_caption") and joycap is None:
+                need = True
+            if need:
+                pending.append(r)
+
+        if pending:
+            n_skipped = sum(1 for r in results
+                            if r.get("lora_viable") == "no" and not r.get("error"))
+            print(f"STEP Phase 2 : captions naturelles sur {len(pending)} viable(s) "
+                  f"({n_skipped} raté(s) ignoré(s) = temps économisé)",
+                  file=sys.stderr, flush=True)
+            # Reset de la barre de progression pour la phase 2
+            print(f"TOTAL {len(pending)}", file=sys.stderr, flush=True)
+            print("STEP 🖼 Génération des captions naturelles (phase 2, viables seulement)…",
+                  file=sys.stderr, flush=True)
+
+            for j, r in enumerate(pending):
+                print(f"PROGRESS {j+1}/{len(pending)} {r.get('name')}",
+                      file=sys.stderr, flush=True)
+                print(f"PREVIEW {r.get('path')}", file=sys.stderr, flush=True)
+                try:
+                    pil_p2 = _ImgP2.open(r["path"]).convert("RGB")
+                except Exception as e:
+                    r["caption_error"] = f"open: {str(e)[:60]}"
+                    continue
+                p = Path(r["path"])
+                # Florence-2 (si actif et pas deja fait)
+                if florence is not None and not r.get("natural_caption"):
+                    try:
+                        with redirect_stdout_to_stderr():
+                            cap = florence.caption(pil_p2)
+                        r["natural_caption"] = cap
+                        p.with_suffix(".nat.txt").write_text(cap, encoding="utf-8")
+                    except Exception as e:
+                        r["florence_error"] = str(e)[:80]
+                # JoyCaption (si actif et pas deja fait)
+                if joycap is not None and not r.get("joycaption"):
+                    try:
+                        with redirect_stdout_to_stderr():
+                            cap = joycap.caption(pil_p2)
+                        r["joycaption"] = cap
+                        p.with_suffix(".joy.txt").write_text(cap, encoding="utf-8")
+                        if captioner_mode == "joycaption":
+                            r["natural_caption"] = cap
+                    except Exception as e:
+                        r["joycaption_error"] = str(e)[:80]
+
+                # Mini-verdict live (montre la caption qui vient d'etre generee)
+                mini2 = {
+                    "name": r.get("name"),
+                    "face_count": r.get("face_count"),
+                    "face_proportion": r.get("face_proportion"),
+                    "face_yaw": r.get("face_yaw"),
+                    "sharpness": r.get("sharpness"),
+                    "expression": r.get("expression"),
+                    "ref_match": r.get("ref_match"),
+                    "face_similarity_to_ref": r.get("face_similarity_to_ref"),
+                    "quality_verdict": r.get("quality_verdict"),
+                    "wd14_tags": (r.get("wd14_tags") or "")[:200],
+                    "joycaption": (r.get("joycaption") or r.get("natural_caption") or "")[:200],
+                    "ai_score": r.get("ai_score"),
+                    "artifacts_severity": r.get("artifacts_severity"),
+                    "artifacts_categories": r.get("artifacts_categories"),
+                }
+                try:
+                    print(f"IMGINFO {json.dumps(mini2, ensure_ascii=False)}",
+                          file=sys.stderr, flush=True)
+                except Exception:
+                    pass
+
+            print("PROGRESS_DONE", file=sys.stderr, flush=True)
+            print("STEP Captions naturelles terminées.", file=sys.stderr, flush=True)
 
     # ===== Matrice de similarite CORPS (CLIP) =====
     overall_body_coherence = None

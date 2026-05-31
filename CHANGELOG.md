@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.5] — 2026-05-31
+
+### Changed (major efficiency win)
+- **Two-phase captioning pipeline.** Natural captions (Florence-2 / JoyCaption)
+  are the slowest step. They are no longer run inline on every image. Instead:
+  - **Phase 1** runs the fast analysis on all images (face, CLIP, quality,
+    WD14 tags, AI detection, artifacts) and computes the viability verdict.
+  - **Phase 2** runs Florence-2 / JoyCaption **only on the photos judged viable
+    or borderline** — the rejects (no face, blurry, wrong person, duplicates,
+    severe artifacts) are skipped entirely.
+  - On a 200-photo set with ~80 viable, JoyCaption now runs on 80 images
+    instead of 200 — roughly **60% less time** on the slow step.
+- Phase 2 has its own progress bar and live preview, so you see the fast
+  results (and the dataset verdict) before the slow captioning starts.
+- The cache persists phase-2 captions, so a later run that keeps more photos
+  only captions the newly-kept ones.
+- Per-target scores now correctly reflect the phase-2 captions.
+- Pre-flight warning updated to explain that only viable photos get captioned.
+
+---
+
 ## [v1.0.4] — 2026-05-31
 
 ### Fixed (big performance win)
