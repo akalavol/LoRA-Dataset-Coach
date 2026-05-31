@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.6] — 2026-05-31
+
+### Fixed (critical)
+- **Crash at the very end of every analysis** (`UnboundLocalError: summary_verdict`).
+  The `summary` dict referenced the global verdict before it was computed, so
+  the whole run crashed after processing all images — losing the entire result.
+  The verdict is now injected into the summary after the grade is computed.
+- **JoyCaption was fully disabled when `bitsandbytes` wasn't installed.**
+  The INT4 path failed at model load (not at config creation, so the old
+  try/except missed it). Now bitsandbytes is detected up-front; if absent,
+  JoyCaption loads in **BF16 (~8 GB VRAM)** instead of being skipped. A
+  hard INT4 failure also falls back to BF16 automatically.
+
+### Note
+If you downloaded a zip (not a git clone), update via ⚙ Config → 🔄 Check now
+→ ⬇ Install update (zip mode), or re-download the latest release. This release
+also includes the GPU acceleration from v1.0.4 — insightface + CLIP will use
+your GPU instead of CPU.
+
+---
+
 ## [v1.0.5] — 2026-05-31
 
 ### Changed (major efficiency win)

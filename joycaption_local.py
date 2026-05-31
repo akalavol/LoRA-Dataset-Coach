@@ -64,8 +64,21 @@ class JoyCaptioner:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
+        # INT4 n'est possible que si le PACKAGE bitsandbytes est reellement installe
+        # (l'import de BitsAndBytesConfig depuis transformers reussit meme sans lui,
+        #  mais from_pretrained plante a l'application -> on verifie en amont).
+        can_int4 = False
+        if use_int4 and device == "cuda":
+            try:
+                import bitsandbytes  # noqa: F401
+                can_int4 = True
+            except Exception:
+                print("STEP bitsandbytes absent → JoyCaption en BF16 (~8 Go VRAM) "
+                      "au lieu d'INT4. Pour activer l'INT4 : pip install bitsandbytes",
+                      file=sys.stderr, flush=True)
+
         print(f"STEP Chargement JoyCaption Beta One ({device}, "
-              f"{'~4 Go INT4' if use_int4 else '~8 Go BF16'}, 1er run ~plusieurs minutes)...",
+              f"{'~4 Go INT4' if can_int4 else '~8 Go BF16'}, 1er run ~plusieurs minutes)...",
               file=sys.stderr, flush=True)
 
         # Chargement du processeur (image + tokenizer + chat template)
@@ -73,21 +86,30 @@ class JoyCaptioner:
 
         # Quantization optionnelle
         load_kwargs = {"torch_dtype": dtype}
-        if use_int4 and device == "cuda":
-            try:
-                from transformers import BitsAndBytesConfig
-                load_kwargs["quantization_config"] = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_compute_dtype=torch.bfloat16,
-                    bnb_4bit_quant_type="nf4",
-                )
-            except Exception as e:
-                print(f"STEP INT4 indispo ({e}) - fallback BF16",
-                      file=sys.stderr, flush=True)
+        if can_int4:
+            from transformers import BitsAndBytesConfig
+            load_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+            )
 
-        self.model = LlavaForConditionalGeneration.from_pretrained(
-            model_name, **load_kwargs,
-        )
+        # Charge le modele ; si l'INT4 echoue malgre tout, retombe sur BF16
+        try:
+            self.model = LlavaForConditionalGeneration.from_pretrained(
+                model_name, **load_kwargs,
+            )
+        except Exception as e:
+            if "quantization_config" in load_kwargs:
+                print(f"STEP INT4 a échoué ({str(e)[:80]}) → repli BF16…",
+                      file=sys.stderr, flush=True)
+                load_kwargs.pop("quantization_config", None)
+                self.model = LlavaForConditionalGeneration.from_pretrained(
+                    model_name, **load_kwargs,
+                )
+            else:
+                raise
+
         if device == "cuda" and "quantization_config" not in load_kwargs:
             self.model = self.model.to(device)
         self.model.eval()

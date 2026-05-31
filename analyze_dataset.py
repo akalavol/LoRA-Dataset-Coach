@@ -1264,7 +1264,7 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
         "artifacts_high_count": n_artifacts_high,
         "artifacts_medium_count": n_artifacts_medium,
         "expressions": expr_counts,
-        "verdict": summary_verdict,
+        "verdict": None,  # rempli plus bas (apres calcul du grade)
         "reference": ref_info,
         "reference_match": ref_match_stats,
     }
@@ -1419,6 +1419,7 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
         "target_min": target_min,
         "target_ideal": target_ideal,
     }
+    summary["verdict"] = summary_verdict  # injecte le verdict dans le summary
 
     # Analyse de la diversite d'expression
     if expr_counts:
