@@ -2,7 +2,10 @@
 
 Outil intégré au **File Manager** (onglet `📊 Analyseur dataset`) qui prend un dossier d'images et te dit, en quelques secondes par image, **si ton dataset est prêt à entraîner un LoRA persona** — et te prépare directement le dossier d'entraînement pour le trainer de ton choix parmi **19 cibles** (Kohya / Flux / Wan / Hunyuan / LTX / CogVideoX / Mochi / Open-Sora / ai-toolkit / OneTrainer / etc.).
 
-**Note actuelle vs état de l'art 2026 : A (9.5/10)** après Lots A + B + C + D.
+**Note actuelle vs état de l'art 2026 : A (9.5/10)** après Lots A + B + C + D + E.
+
+> 🌍 English version : [DOCUMENTATION.md](DOCUMENTATION.md)
+> 📦 GitHub : https://github.com/akalavol/LoRA-Dataset-Coach
 
 ---
 
