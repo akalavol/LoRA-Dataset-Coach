@@ -1,6 +1,6 @@
 # LoRA Dataset Coach — Full Documentation
 
-Integrated tool in the **File Manager** (📊 Dataset Analyzer tab) that takes a folder of images and tells you, in seconds per image, **whether your dataset is ready to train a persona LoRA** — and prepares the training folder for your trainer of choice among **19 targets** (Kohya / Flux / Wan / Hunyuan / LTX / CogVideoX / Mochi / Open-Sora / ai-toolkit / OneTrainer / etc.).
+A focused Tkinter app with **3 tabs** — 📊 Dataset Analyzer, 📊 Evaluate LoRA, ⚙ Config — that takes a folder of images and tells you, in seconds per image, **whether your dataset is ready to train a persona LoRA** — and prepares the training folder for your trainer of choice among **19 targets** (Kohya / Flux / Wan / Hunyuan / LTX / CogVideoX / Mochi / Open-Sora / ai-toolkit / OneTrainer / etc.).
 
 **Current score vs 2026 state-of-the-art: A (9.5/10)** after phases A + B + C + D + E.
 
@@ -640,7 +640,7 @@ The lighting is soft and diffuse, suggesting an indoor environment with natural 
 2. Copy/move to C:\AI\datasets\my_persona\
        │
        ▼
-3. File Manager → 📊 Dataset Analyzer tab
+3. LoRA Dataset Coach → 📊 Dataset Analyzer tab
    - Folder: C:\AI\datasets\my_persona
    - Reference: the anchor photo used by InstantID
    - Captions:

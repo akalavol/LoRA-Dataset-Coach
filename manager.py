@@ -34,116 +34,6 @@ PROMPT_MODELS = [
 ]
 
 # System prompts par type de generation
-PROMPT_SYSTEMS = {
-    "traduction": {
-        "label": "🌍 Traduction FR→EN (mots-cles uniquement)",
-        "system": (
-            "You are a French-to-English keyword translator for AI image prompts. "
-            "The user gives keywords or a short description in French. "
-            "You translate ONLY into English, keeping the SAME structure (comma-separated keywords stay "
-            "comma-separated, sentences stay sentences). "
-            "Do NOT add new keywords, do NOT optimize, do NOT restructure, do NOT add quality tags. "
-            "Just a faithful keyword-level translation. "
-            "If a word is already English or is a proper noun (Tokyo, Nikon, etc.), keep it as-is.\n\n"
-            "TRADUCTION:\n<the English translation, same structure as input>\n\n"
-            "No explanation, no markdown, nothing else."
-        ),
-    },
-    "sdxl": {
-        "label": "🎨 Image SDXL (RealVisXL, workflow 01/02/08)",
-        "system": (
-            "You are a Stable Diffusion XL prompt optimizer. "
-            "User gives a description (any language). You output ONLY 2 sections:\n\n"
-            "POSITIVE:\n<optimized SDXL-style prompt in English, short comma-separated keywords, "
-            "starting with photo type (photo of/cinematic shot of), then subject details, environment, lighting, "
-            "style, technical quality tags. Max 70 tokens. Use (keyword:1.2) for emphasis if needed.>\n\n"
-            "NEGATIVE:\n<comma-separated negative tags for SDXL: worst quality, low quality, blurry, deformed, etc.>\n\n"
-            "Settings: 30 steps, CFG 5-7, dpmpp_2m karras, 1024x1024.\n"
-            "No explanation, no markdown, just the 2 sections."
-        ),
-    },
-    "flux": {
-        "label": "🚀 Image Flux (workflow 03)",
-        "system": (
-            "You are a Flux.1 prompt optimizer. User gives a description (any language). "
-            "You output ONLY a natural-language English prompt (complete sentences, like describing a photo to a human). "
-            "Include subject, action, environment, lighting, composition, photographic style. "
-            "Length 2-4 sentences. NO tags, NO comma-separated keywords, NO emphasis weights.\n\n"
-            "POSITIVE:\n<the optimized natural language prompt>\n\n"
-            "Settings: 20 steps, CFG 3.5, euler simple, 1024x1024.\n"
-            "No explanation, no markdown, just the POSITIVE section."
-        ),
-    },
-    "flux_kontext": {
-        "label": "✏️ Edition image Flux Kontext (workflow 04)",
-        "system": (
-            "You are a Flux Kontext image-editing instruction optimizer. "
-            "User describes an image edit they want (any language). You output ONLY a clear, direct, "
-            "imperative instruction in English that tells the AI EXACTLY what to change in the source image. "
-            "Keep the unchanged parts implicit ('keep everything else identical' helps). "
-            "Examples : 'Change the t-shirt color to red, keep everything else identical', "
-            "'Remove the watermark in the bottom-right corner', 'Add a pair of glasses to the woman's face'.\n\n"
-            "INSTRUCTION:\n<the imperative edit instruction>\n\n"
-            "Settings: 28 steps, CFG 2.5, euler simple.\n"
-            "No explanation, no markdown."
-        ),
-    },
-    "wan_t2v": {
-        "label": "🎬 Video Wan 2.2 - texte vers video (workflow 05)",
-        "system": (
-            "You are a Wan 2.2 text-to-video prompt optimizer. User describes a video scene (any language). "
-            "You output ONLY 2 sections in English:\n\n"
-            "POSITIVE:\n<natural-language scene description including : subject and action, environment, "
-            "lighting/atmosphere, AND describe the camera motion (static, slow dolly in, pan left, tracking shot, etc.) "
-            "AND describe motion over time. 2-4 sentences. Cinematic language helps.>\n\n"
-            "NEGATIVE:\n<bad quality, blurry, low resolution, deformed, jittery>\n\n"
-            "Settings: 20 steps each stage (HighNoise+LowNoise), CFG 4, 640x360, 49 frames @24fps (2 sec).\n"
-            "No explanation, no markdown."
-        ),
-    },
-    "wan_i2v": {
-        "label": "🎞️ Video Wan 2.2 - image vers video (workflow 06)",
-        "system": (
-            "You are a Wan 2.2 image-to-video prompt optimizer. User describes what should HAPPEN in the video "
-            "(starting from a still image they have). Any language input. Output ONLY 2 sections in English:\n\n"
-            "POSITIVE:\n<description of the MOTION and ACTION : what moves, how the camera moves, "
-            "what changes over 2 seconds. Focus on motion, NOT on describing the subject (the input image already shows it). "
-            "Examples : 'The woman smiles slightly, her hair moves in the breeze, the camera slowly pushes in'. "
-            "2-3 sentences max.>\n\n"
-            "NEGATIVE:\n<bad quality, blurry, deformed, static>\n\n"
-            "Settings: 20 steps each stage, CFG 4.\n"
-            "No explanation, no markdown."
-        ),
-    },
-    "ltx": {
-        "label": "⚡ Video LTX rapide (workflow 07)",
-        "system": (
-            "You are an LTX-Video prompt optimizer. User describes a short video (any language). "
-            "Output ONLY 2 sections in English:\n\n"
-            "POSITIVE:\n<concise cinematic description, 1-2 sentences, with subject + action + camera. "
-            "Example : 'A cinematic shot of a woman walking through neon-lit Tokyo at night, slow motion, "
-            "rain on the ground, 35mm film grain'.>\n\n"
-            "NEGATIVE:\n<low quality, deformed, blurry>\n\n"
-            "Settings: 30 steps, CFG 3, 768x512, 97 frames @24fps (4 sec).\n"
-            "No explanation, no markdown."
-        ),
-    },
-    "acestep": {
-        "label": "🎵 Musique ACE-Step (workflow 09)",
-        "system": (
-            "You are an ACE-Step music prompt optimizer. User describes a song (any language). "
-            "Output ONLY 2 sections :\n\n"
-            "TAGS:\n<comma-separated style descriptors in English : genre, sub-genre, tempo (BPM), mood, "
-            "main instruments, vocal type. Example : 'electronic, synthwave, 120 bpm, retro, energetic, "
-            "female vocals, analog synth, drum machine'.>\n\n"
-            "LYRICS:\n<structured song lyrics in the requested language with section tags [verse], [chorus], "
-            "[bridge], [outro]. Each section 3-6 lines. Keep it singable, with rhythm. "
-            "If user didn't specify a topic, infer from their description.>\n\n"
-            "Settings: 50 steps, CFG 5, duration 30-120 sec.\n"
-            "No explanation, no markdown."
-        ),
-    },
-}
 
 # ============================================================
 # Theme
@@ -173,15 +63,12 @@ FONT_EMOJI  = ("Segoe UI Emoji", 18)
 CONFIG_FILE = Path(__file__).parent / "config.json"
 
 DEFAULT_CONFIG = {
-    "loras_active": "C:\\AI\\ComfyUI-Zluda\\models\\loras",
-    "loras_backup": "D:\\data\\loras-backup",
-    "outputs": "C:\\AI\\ComfyUI-Zluda\\output",
-    "inputs": "C:\\AI\\ComfyUI-Zluda\\input",
+    # Path to the ComfyUI python_embeded.exe that has insightface + torch CUDA
+    "comfyui_python": COMFYUI_FUTURE_PY,
+    # Default folder pre-filled in the analyzer
+    "datasets_dir": "C:\\AI\\datasets",
 }
 
-LORA_EXTS = (".safetensors", ".ckpt", ".pt", ".bin")
-IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
-MEDIA_EXTS = IMAGE_EXTS + (".mp4", ".webm", ".wav", ".mp3", ".flac")
 
 
 def load_config():
@@ -202,47 +89,6 @@ def save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 
-def fmt_size(n):
-    for unit in ["o", "Ko", "Mo", "Go"]:
-        if n < 1024:
-            return f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} To"
-
-
-def list_files(folder, extensions, ignore_starts_with=None, recursive=False, max_depth=3):
-    p = Path(folder)
-    if not p.exists():
-        return []
-    ignore_starts_with = ignore_starts_with or ()
-    items = []
-    iterator = p.rglob("*") if recursive else p.iterdir()
-    for f in iterator:
-        if not f.is_file():
-            continue
-        if f.suffix.lower() not in extensions:
-            continue
-        if any(f.name.startswith(s) for s in ignore_starts_with):
-            continue
-        try:
-            rel = f.relative_to(p)
-            depth = len(rel.parts) - 1
-        except ValueError:
-            rel = Path(f.name)
-            depth = 0
-        if depth > max_depth:
-            continue
-        parent_rel = str(rel.parent) if str(rel.parent) != "." else "/"
-        items.append({
-            "name": f.name,
-            "path": str(f),
-            "folder": str(f.parent),    # chemin absolu du dossier parent
-            "folder_rel": parent_rel,    # relatif a la base
-            "size": f.stat().st_size,
-            "mtime": f.stat().st_mtime,
-        })
-    items.sort(key=lambda x: x["mtime"], reverse=True)
-    return items
 
 
 def open_in_explorer(path):
@@ -281,10 +127,13 @@ class App:
         self.root = root
         self.cfg = load_config()
 
-        root.title("AI File Manager - LoRAs & Outputs")
-        root.geometry("1180x720")
+        root.title("LoRA Dataset Coach")
+        root.geometry("1180x780")
         root.configure(bg=BG)
         root.minsize(900, 600)
+
+        # Chemin du Python ComfyUI (configurable, sinon valeur par defaut)
+        self.comfyui_py = self.cfg.get("comfyui_python") or self.comfyui_py
 
         # Style ttk pour treeview dark
         style = ttk.Style()
@@ -311,9 +160,9 @@ class App:
         # Header
         header = Frame(root, bg=BG, pady=14, padx=20)
         header.pack(fill="x")
-        Label(header, text="🧬  Gestionnaire IA",
+        Label(header, text="🧬  LoRA Dataset Coach",
               font=FONT_TITLE, fg=TEXT, bg=BG).pack(side="left")
-        Label(header, text="LoRAs - Outputs - Inputs",
+        Label(header, text="Analyse · Prépare · Évalue tes datasets LoRA",
               font=FONT_BODY, fg=TEXT_DIM, bg=BG).pack(side="left", padx=15, pady=8)
 
         # Status bar (cree AVANT les tabs car ils l'utilisent pendant init)
@@ -328,308 +177,17 @@ class App:
         self.notebook.pack(fill="both", expand=True, padx=15, pady=10)
         notebook = self.notebook
 
-        self._build_loras_tab(notebook)
-        self._build_files_tab(notebook, "Outputs", "outputs", "🖼️")
-        self._build_files_tab(notebook, "Inputs", "inputs", "📥")
-        self._build_prompt_tab(notebook)
         self._build_analyzer_tab(notebook)
         self._build_evaluator_tab(notebook)
         self._build_config_tab(notebook)
 
     def select_tab(self, name):
         """Selectionne un tab par nom court."""
-        mapping = {"loras": 0, "outputs": 1, "inputs": 2, "prompt": 3,
-                    "analyzer": 4, "evaluator": 5, "config": 6}
+        mapping = {"analyzer": 0, "evaluator": 1, "config": 2}
         if name in mapping:
             self.notebook.select(mapping[name])
 
-        self.refresh_loras()
-
-    # ------------------ LoRAs tab ------------------
-    def _build_loras_tab(self, parent):
-        frame = Frame(parent, bg=BG, padx=10, pady=10)
-        parent.add(frame, text="  🧬 LoRAs  ")
-
-        # 3 zones : actives | centre boutons | backup
-        cols = Frame(frame, bg=BG)
-        cols.pack(fill="both", expand=True)
-
-        # ---- Actives ----
-        left = Frame(cols, bg=CARD, padx=10, pady=10)
-        left.pack(side="left", fill="both", expand=True, padx=(0, 5))
-        Label(left, text="✅ Actives (vues par ComfyUI)",
-              font=FONT_H1, fg=GREEN, bg=CARD).pack(anchor="w", pady=(0, 8))
-
-        tree_frame_l = Frame(left, bg=CARD)
-        tree_frame_l.pack(fill="both", expand=True)
-        self.tree_active = ttk.Treeview(tree_frame_l, columns=("folder", "size", "date"),
-                                        show="tree headings", style="Dark.Treeview")
-        self.tree_active.heading("#0", text="Fichier")
-        self.tree_active.heading("folder", text="📂 Dossier")
-        self.tree_active.heading("size", text="Taille")
-        self.tree_active.heading("date", text="Date")
-        self.tree_active.column("#0", width=220)
-        self.tree_active.column("folder", width=70, anchor="w")
-        self.tree_active.column("size", width=70, anchor="e")
-        self.tree_active.column("date", width=110, anchor="center")
-        sb_l = ttk.Scrollbar(tree_frame_l, orient="vertical", command=self.tree_active.yview)
-        self.tree_active.configure(yscrollcommand=sb_l.set)
-        self.tree_active.pack(side="left", fill="both", expand=True)
-        sb_l.pack(side="right", fill="y")
-        self.tree_active.bind("<Button-1>", lambda e: self._on_tree_click(e, self.tree_active))
-
-        # ---- Boutons centre ----
-        center = Frame(cols, bg=BG, padx=10)
-        center.pack(side="left", fill="y")
-        Frame(center, height=30, bg=BG).pack()  # spacer
-        make_button(center, "Backup  ➡", self.lora_uninstall, width=15).pack(pady=5)
-        make_button(center, "⬅  Restore", self.lora_restore, width=15).pack(pady=5)
-        Frame(center, height=20, bg=BG).pack()
-        make_button(center, "📥 Importer", self.lora_import,
-                    primary=True, width=15).pack(pady=5)
-        make_button(center, "🗑 Supprimer", self.lora_delete,
-                    danger=True, width=15).pack(pady=5)
-        Frame(center, height=20, bg=BG).pack()
-        make_button(center, "🔄 Refresh", self.refresh_loras, width=15).pack(pady=5)
-        Frame(center, height=10, bg=BG).pack()
-        make_button(center, "📂 Actives", lambda: open_in_explorer(self.cfg["loras_active"]),
-                    width=15).pack(pady=2)
-        make_button(center, "📂 Backup", lambda: open_in_explorer(self.cfg["loras_backup"]),
-                    width=15).pack(pady=2)
-
-        # ---- Backup ----
-        right = Frame(cols, bg=CARD, padx=10, pady=10)
-        right.pack(side="left", fill="both", expand=True, padx=(5, 0))
-        Label(right, text="💾 Backup (D:\\data\\loras-backup)",
-              font=FONT_H1, fg=YELLOW, bg=CARD).pack(anchor="w", pady=(0, 8))
-
-        tree_frame_r = Frame(right, bg=CARD)
-        tree_frame_r.pack(fill="both", expand=True)
-        self.tree_backup = ttk.Treeview(tree_frame_r, columns=("folder", "size", "date"),
-                                        show="tree headings", style="Dark.Treeview")
-        self.tree_backup.heading("#0", text="Fichier")
-        self.tree_backup.heading("folder", text="📂 Dossier")
-        self.tree_backup.heading("size", text="Taille")
-        self.tree_backup.heading("date", text="Date")
-        self.tree_backup.column("#0", width=220)
-        self.tree_backup.column("folder", width=70, anchor="w")
-        self.tree_backup.column("size", width=70, anchor="e")
-        self.tree_backup.column("date", width=110, anchor="center")
-        sb_r = ttk.Scrollbar(tree_frame_r, orient="vertical", command=self.tree_backup.yview)
-        self.tree_backup.configure(yscrollcommand=sb_r.set)
-        self.tree_backup.pack(side="left", fill="both", expand=True)
-        sb_r.pack(side="right", fill="y")
-        self.tree_backup.bind("<Button-1>", lambda e: self._on_tree_click(e, self.tree_backup))
-
-    def refresh_loras(self):
-        self.tree_active.delete(*self.tree_active.get_children())
-        active = list_files(self.cfg["loras_active"], LORA_EXTS,
-                           ignore_starts_with=("put_",), recursive=True)
-        for it in active:
-            date = datetime.fromtimestamp(it["mtime"]).strftime("%Y-%m-%d %H:%M")
-            self.tree_active.insert("", "end", text=f"  {it['name']}",
-                                     values=(it["folder_rel"], fmt_size(it["size"]), date),
-                                     tags=(it["path"], it["folder"]))
-
-        self.tree_backup.delete(*self.tree_backup.get_children())
-        backup = list_files(self.cfg["loras_backup"], LORA_EXTS,
-                           ignore_starts_with=("put_",), recursive=True)
-        for it in backup:
-            date = datetime.fromtimestamp(it["mtime"]).strftime("%Y-%m-%d %H:%M")
-            self.tree_backup.insert("", "end", text=f"  {it['name']}",
-                                     values=(it["folder_rel"], fmt_size(it["size"]), date),
-                                     tags=(it["path"], it["folder"]))
-
-        a_size = sum(it["size"] for it in active)
-        b_size = sum(it["size"] for it in backup)
-        self.status_var.set(
-            f"✅ Actives : {len(active)} ({fmt_size(a_size)})  |  "
-            f"💾 Backup : {len(backup)} ({fmt_size(b_size)})"
-        )
-
-    def _selected_path(self, tree):
-        sel = tree.selection()
-        if not sel:
-            return None
-        return tree.item(sel[0], "tags")[0] if tree.item(sel[0], "tags") else None
-
-    def _on_tree_click(self, event, tree):
-        # Detecte si le clic est sur la colonne 'folder' -> ouvre le dossier
-        region = tree.identify("region", event.x, event.y)
-        if region != "cell":
-            return
-        col = tree.identify_column(event.x)
-        # column ids : #1 = folder, #2 = size, #3 = date
-        if col != "#1":
-            return
-        iid = tree.identify_row(event.y)
-        if not iid:
-            return
-        tags = tree.item(iid, "tags")
-        if len(tags) >= 2:
-            folder = tags[1]
-            if Path(folder).exists():
-                os.startfile(folder)
-                self.status_var.set(f"Ouvert : {folder}")
-
-    def lora_uninstall(self):
-        src = self._selected_path(self.tree_active)
-        if not src:
-            messagebox.showinfo("Selection requise",
-                              "Selectionne une LoRA dans la colonne ✅ Actives.")
-            return
-        dst_dir = Path(self.cfg["loras_backup"])
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        dst = dst_dir / Path(src).name
-        if dst.exists():
-            if not messagebox.askyesno("Existe deja", f"{dst.name} existe deja en backup. Ecraser ?"):
-                return
-        shutil.move(src, dst)
-        self.refresh_loras()
-
-    def lora_restore(self):
-        src = self._selected_path(self.tree_backup)
-        if not src:
-            messagebox.showinfo("Selection requise",
-                              "Selectionne une LoRA dans la colonne 💾 Backup.")
-            return
-        dst_dir = Path(self.cfg["loras_active"])
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        dst = dst_dir / Path(src).name
-        if dst.exists():
-            if not messagebox.askyesno("Existe deja", f"{dst.name} existe deja en actives. Ecraser ?"):
-                return
-        shutil.move(src, dst)
-        self.refresh_loras()
-
-    def lora_import(self):
-        files = filedialog.askopenfilenames(
-            title="Selectionne les LoRAs a installer",
-            filetypes=[("LoRA", "*.safetensors *.ckpt *.pt *.bin"), ("Tous", "*.*")]
-        )
-        if not files:
-            return
-        dst_dir = Path(self.cfg["loras_active"])
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        for src in files:
-            src_p = Path(src)
-            dst = dst_dir / src_p.name
-            if dst.exists():
-                if not messagebox.askyesno("Existe", f"{src_p.name} existe deja. Ecraser ?"):
-                    continue
-            shutil.copy2(src, dst)
-        self.refresh_loras()
-
-    def lora_delete(self):
-        src = self._selected_path(self.tree_backup)
-        if not src:
-            messagebox.showinfo("Selection requise",
-                              "Selectionne dans 💾 Backup pour suppression definitive.")
-            return
-        if not messagebox.askyesno("Confirmation",
-            f"Supprimer DEFINITIVEMENT :\n{Path(src).name}\n\nIrreversible.",
-            icon="warning"):
-            return
-        Path(src).unlink()
-        self.refresh_loras()
-
-    # ------------------ Files tabs ------------------
-    def _build_files_tab(self, parent, label, cfg_key, icon):
-        frame = Frame(parent, bg=BG, padx=10, pady=10)
-        parent.add(frame, text=f"  {icon} {label}  ")
-
-        # Header avec chemin + boutons
-        top = Frame(frame, bg=CARD, padx=12, pady=10)
-        top.pack(fill="x", pady=(0, 8))
-        Label(top, text=f"Dossier :", font=FONT_BODY, fg=TEXT_DIM, bg=CARD).pack(side="left")
-        Label(top, text=self.cfg[cfg_key], font=FONT_MONO, fg=ACCENT, bg=CARD).pack(side="left", padx=8)
-        make_button(top, "📂 Ouvrir",
-                    lambda: open_in_explorer(self.cfg[cfg_key])).pack(side="right", padx=4)
-        make_button(top, "🔄 Refresh",
-                    lambda: self._refresh_files(tree, cfg_key)).pack(side="right", padx=4)
-
-        # Treeview
-        tree_frame = Frame(frame, bg=CARD)
-        tree_frame.pack(fill="both", expand=True)
-
-        tree = ttk.Treeview(tree_frame, columns=("folder", "size", "date"),
-                            show="tree headings", style="Dark.Treeview")
-        tree.heading("#0", text="Fichier")
-        tree.heading("folder", text="📂 Dossier (clic = ouvrir)")
-        tree.heading("size", text="Taille")
-        tree.heading("date", text="Date")
-        tree.column("#0", width=480)
-        tree.column("folder", width=240, anchor="w")
-        tree.column("size", width=90, anchor="e")
-        tree.column("date", width=140, anchor="center")
-        sb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
-        tree.configure(yscrollcommand=sb.set)
-        tree.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
-        tree.bind("<Button-1>", lambda e, t=tree: self._on_tree_click(e, t))
-
-        # Menu contextuel
-        menu = tk.Menu(tree, tearoff=0, bg=CARD, fg=TEXT,
-                       activebackground=ACCENT, activeforeground=BG)
-        menu.add_command(label="Ouvrir le fichier", command=lambda: self._open_selected(tree))
-        menu.add_command(label="Reveler dans l'explorateur", command=lambda: self._reveal_selected(tree))
-        menu.add_separator()
-        menu.add_command(label="Copier ailleurs...", command=lambda: self._copy_selected(tree))
-        menu.add_command(label="Supprimer", command=lambda: self._delete_selected(tree, cfg_key))
-
-        def show_menu(event):
-            iid = tree.identify_row(event.y)
-            if iid:
-                tree.selection_set(iid)
-                menu.post(event.x_root, event.y_root)
-
-        tree.bind("<Button-3>", show_menu)
-        tree.bind("<Double-Button-1>", lambda e: self._open_selected(tree))
-
-        self._refresh_files(tree, cfg_key)
-
-    def _refresh_files(self, tree, cfg_key):
-        tree.delete(*tree.get_children())
-        items = list_files(self.cfg[cfg_key], MEDIA_EXTS + (".txt", ".json"),
-                           recursive=True, max_depth=3)
-        for it in items[:500]:
-            date = datetime.fromtimestamp(it["mtime"]).strftime("%Y-%m-%d %H:%M")
-            tree.insert("", "end", text=f"  {it['name']}",
-                        values=(it["folder_rel"], fmt_size(it["size"]), date),
-                        tags=(it["path"], it["folder"]))
-        self.status_var.set(f"{cfg_key} : {len(items)} fichier(s)")
-
-    def _open_selected(self, tree):
-        path = self._selected_path(tree)
-        if path and Path(path).exists():
-            os.startfile(path)
-
-    def _reveal_selected(self, tree):
-        path = self._selected_path(tree)
-        if path and Path(path).exists():
-            subprocess.Popen(["explorer", "/select,", path])
-
-    def _copy_selected(self, tree):
-        src = self._selected_path(tree)
-        if not src:
-            return
-        dst = filedialog.asksaveasfilename(
-            initialfile=Path(src).name, defaultextension=Path(src).suffix
-        )
-        if dst:
-            shutil.copy2(src, dst)
-            self.status_var.set(f"Copie : {Path(dst).name}")
-
-    def _delete_selected(self, tree, cfg_key):
-        path = self._selected_path(tree)
-        if not path:
-            return
-        if not messagebox.askyesno("Confirmation", f"Supprimer :\n{Path(path).name} ?"):
-            return
-        Path(path).unlink()
-        self._refresh_files(tree, cfg_key)
-
-    # ------------------ Config tab ------------------
+    # ------------------ (removed: LoRAs / Outputs / Inputs / Prompt tabs) ------------------
     # ============================================================
     # ÉVALUATEUR LoRA POST-TRAIN (Lot E partie 1)
     # MirrorMetrics-inspired : R-FaceSim, Copycat, Black Hole
@@ -768,7 +326,7 @@ class App:
         import time as _time
         script = str(Path(__file__).parent / "lora_evaluator.py")
         try:
-            cmd = [COMFYUI_FUTURE_PY, script, gen, ref]
+            cmd = [self.comfyui_py, script, gen, ref]
             if train:
                 cmd.append(train)
             proc = subprocess.Popen(
@@ -898,19 +456,20 @@ class App:
         frame = Frame(parent, bg=BG, padx=20, pady=20)
         parent.add(frame, text="  ⚙ Config  ")
 
-        Label(frame, text="Chemins des dossiers",
+        Label(frame, text="Configuration",
               font=FONT_H1, fg=TEXT, bg=BG).pack(anchor="w", pady=(0, 5))
-        Label(frame, text="Modifie selon ton install ComfyUI. Sauvegarde dans config.json.",
+        Label(frame, text="Adapte selon ton install. Sauvegardé dans config.json.",
               font=FONT_SMALL, fg=TEXT_DIM, bg=BG).pack(anchor="w", pady=(0, 20))
 
         self.entries = {}
+        # key : (icon, label, desc, picker_type)  picker_type = "file" | "dir"
         labels = {
-            "loras_active":  ("🧬", "LoRAs actives", "Dossier scanne par ComfyUI"),
-            "loras_backup":  ("💾", "Backup LoRAs", "Stockage non-actif"),
-            "outputs":       ("🖼️", "Outputs ComfyUI", "Images / videos generees"),
-            "inputs":        ("📥", "Inputs ComfyUI", "Images de reference (img2img, InstantID)"),
+            "comfyui_python": ("🐍", "Python ComfyUI",
+                                "python.exe de ComfyUI (a insightface + torch CUDA)", "file"),
+            "datasets_dir":   ("📂", "Dossier datasets par défaut",
+                                "Pré-rempli dans l'analyseur", "dir"),
         }
-        for key, (icon, label, desc) in labels.items():
+        for key, (icon, label, desc, picker) in labels.items():
             card = Frame(frame, bg=CARD, padx=14, pady=12)
             card.pack(fill="x", pady=4)
 
@@ -922,12 +481,15 @@ class App:
 
             entry_row = Frame(card, bg=CARD)
             entry_row.pack(fill="x", pady=(8, 0))
-            var = StringVar(value=self.cfg[key])
+            var = StringVar(value=self.cfg.get(key, ""))
             entry = tk.Entry(entry_row, textvariable=var, font=FONT_MONO,
                              bg=BG2, fg=TEXT, insertbackground=TEXT,
                              relief="flat", borderwidth=0)
             entry.pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 6))
-            make_button(entry_row, "📂", lambda v=var: self._pick_folder(v)).pack(side="left")
+            if picker == "file":
+                make_button(entry_row, "📂", lambda v=var: self._pick_file(v)).pack(side="left")
+            else:
+                make_button(entry_row, "📂", lambda v=var: self._pick_folder(v)).pack(side="left")
             self.entries[key] = var
 
         btn_row = Frame(frame, bg=BG)
@@ -1141,142 +703,6 @@ class App:
         self.changelog_text.config(state="disabled")
 
     # ============================================================
-    # PROMPT OPTIMIZER (via Ollama gemma4)
-    # ============================================================
-    def _build_prompt_tab(self, parent):
-        frame = Frame(parent, bg=BG, padx=15, pady=12)
-        parent.add(frame, text="  🪄 Optimiseur prompt  ")
-
-        # Header
-        Label(frame, text="Optimiseur de prompt (LLM local Gemma 4)",
-              font=FONT_H1, fg=ACCENT2, bg=BG).pack(anchor="w")
-        Label(frame, text="Tape ton prompt brut (FR ou EN). L'IA le reecrit pour SDXL ou Flux + propose le negatif.",
-              font=FONT_SMALL, fg=TEXT_DIM, bg=BG).pack(anchor="w", pady=(0, 10))
-
-        # Selecteur de TYPE de generation
-        type_frame = Frame(frame, bg=CARD, padx=10, pady=8)
-        type_frame.pack(fill="x", pady=4)
-        Label(type_frame, text="🎯 Type :", font=FONT_BODY, fg=TEXT, bg=CARD).pack(side="left")
-        type_options = [f"{key}  |  {data['label']}" for key, data in PROMPT_SYSTEMS.items()]
-        self.prompt_type_var = StringVar(value=type_options[0])
-        type_combo = ttk.Combobox(type_frame, textvariable=self.prompt_type_var,
-                                   values=type_options, state="readonly", width=60, font=FONT_BODY)
-        type_combo.current(0)
-        type_combo.pack(side="left", padx=10, fill="x", expand=True)
-
-        # Selecteur de modele LLM
-        model_frame = Frame(frame, bg=CARD, padx=10, pady=8)
-        model_frame.pack(fill="x", pady=4)
-        Label(model_frame, text="🤖 Modele LLM :", font=FONT_BODY, fg=TEXT, bg=CARD).pack(side="left")
-        self.prompt_model_var = StringVar(value=PROMPT_MODELS[0][0])
-        model_combo = ttk.Combobox(model_frame, textvariable=self.prompt_model_var,
-                                    values=[f"{m}  -  {d}" for m, d in PROMPT_MODELS],
-                                    state="readonly", width=55, font=FONT_BODY)
-        model_combo.current(0)
-        model_combo.pack(side="left", padx=10, fill="x", expand=True)
-
-        # Input area
-        input_frame = Frame(frame, bg=CARD, padx=10, pady=8)
-        input_frame.pack(fill="x", pady=4)
-        Label(input_frame, text="📝 Ton prompt brut :",
-              font=FONT_BODY, fg=TEXT, bg=CARD).pack(anchor="w")
-        self.prompt_input = Text(input_frame, height=4, font=FONT_BODY,
-                                  bg=BG2, fg=TEXT, insertbackground=TEXT,
-                                  relief="flat", wrap="word", padx=8, pady=6)
-        self.prompt_input.pack(fill="x", pady=(4, 0))
-        self.prompt_input.insert("1.0", "une femme avec des cheveux bruns, debout dans une rue de tokyo la nuit")
-
-        # Boutons
-        btn_row = Frame(frame, bg=BG)
-        btn_row.pack(fill="x", pady=10)
-        make_button(btn_row, "✨ Optimiser le prompt",
-                    self._optimize_prompt_selected, primary=True, width=26).pack(side="left", padx=4)
-        make_button(btn_row, "📋 Copier resultat",
-                    self._copy_prompt_result, width=18).pack(side="right", padx=4)
-
-        # Output area
-        out_frame = Frame(frame, bg=CARD, padx=10, pady=8)
-        out_frame.pack(fill="both", expand=True, pady=4)
-        Label(out_frame, text="✨ Resultat optimise :",
-              font=FONT_BODY, fg=GREEN, bg=CARD).pack(anchor="w")
-        self.prompt_output = Text(out_frame, font=FONT_BODY,
-                                   bg=BG2, fg=TEXT, insertbackground=TEXT,
-                                   relief="flat", wrap="word", padx=8, pady=6)
-        self.prompt_output.pack(fill="both", expand=True, pady=(4, 0))
-
-    def _optimize_prompt_selected(self):
-        """Recupere le type selectionne dans le dropdown et lance l'optim."""
-        sel = self.prompt_type_var.get()
-        # Format : "key  |  label"
-        mode = sel.split("  |  ")[0].strip() if "  |  " in sel else sel
-        if mode not in PROMPT_SYSTEMS:
-            messagebox.showerror("Erreur", f"Type inconnu : {mode}")
-            return
-        self._optimize_prompt(mode)
-
-    def _optimize_prompt(self, mode):
-        user_prompt = self.prompt_input.get("1.0", "end").strip()
-        if not user_prompt:
-            messagebox.showinfo("Vide", "Ecris un prompt d'abord.")
-            return
-
-        # Extrait le nom du modele
-        selected_model = self.prompt_model_var.get()
-        model_name = selected_model.split("  -  ")[0].strip() if "  -  " in selected_model else selected_model
-
-        self.prompt_output.delete("1.0", "end")
-        self.prompt_output.insert("1.0", f"⏳ Generation en cours avec {model_name}...\n")
-        self.status_var.set(f"Optim {mode} via {model_name}...")
-        self.root.update_idletasks()
-
-        threading.Thread(target=self._call_ollama, args=(user_prompt, mode, model_name), daemon=True).start()
-
-    def _call_ollama(self, user_prompt, mode, model_name):
-        system = PROMPT_SYSTEMS[mode]["system"]
-
-        data = {
-            "model": model_name,
-            "system": system,
-            "prompt": user_prompt,
-            "stream": False,
-            "options": {"temperature": 0.4}
-        }
-
-        try:
-            req = urllib.request.Request(
-                OLLAMA_URL,
-                data=json.dumps(data).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                result = json.loads(resp.read())
-            text = result.get("response", "(reponse vide)").strip()
-            self.root.after(0, lambda: self._show_prompt_result(text))
-        except urllib.error.URLError as e:
-            self.root.after(0, lambda: self._show_prompt_result(
-                f"❌ Ollama injoignable.\n\n"
-                f"Verifie que Ollama tourne :\n"
-                f"  - Icone Ollama dans la barre des taches\n"
-                f"  - OU lance via le AI Launcher > LLM > Ollama (tray)\n\n"
-                f"Erreur : {e}"
-            ))
-        except Exception as e:
-            self.root.after(0, lambda: self._show_prompt_result(f"❌ Erreur : {e}"))
-
-    def _show_prompt_result(self, text):
-        self.prompt_output.delete("1.0", "end")
-        self.prompt_output.insert("1.0", text)
-        self.status_var.set("Prompt optimise")
-
-    def _copy_prompt_result(self):
-        text = self.prompt_output.get("1.0", "end").strip()
-        if not text:
-            return
-        self.root.clipboard_clear()
-        self.root.clipboard_append(text)
-        self.status_var.set("Copie dans le presse-papier")
-
-    # ============================================================
     # ANALYZER : coherence dataset LoRA
     # ============================================================
     def _build_analyzer_tab(self, parent):
@@ -1294,7 +720,7 @@ class App:
         sel_frame.pack(fill="x", pady=4)
         Label(sel_frame, text="📂 Dossier dataset :",
               font=FONT_BODY, fg=TEXT, bg=CARD).pack(side="left")
-        self.analyzer_path = StringVar(value=r"C:\AI\datasets")
+        self.analyzer_path = StringVar(value=self.cfg.get("datasets_dir", r"C:\AI\datasets"))
         entry = tk.Entry(sel_frame, textvariable=self.analyzer_path, font=FONT_MONO,
                          bg=BG2, fg=TEXT, insertbackground=TEXT, relief="flat")
         entry.pack(side="left", fill="x", expand=True, ipady=5, padx=8)
@@ -1532,8 +958,8 @@ class App:
         if not Path(folder).is_dir():
             messagebox.showerror("Erreur", f"Dossier introuvable :\n{folder}")
             return
-        if not Path(COMFYUI_FUTURE_PY).exists():
-            messagebox.showerror("Erreur", f"Python ComfyUI-future introuvable :\n{COMFYUI_FUTURE_PY}\n\n"
+        if not Path(self.comfyui_py).exists():
+            messagebox.showerror("Erreur", f"Python ComfyUI-future introuvable :\n{self.comfyui_py}\n\n"
                                             "L'analyseur a besoin d'insightface (installe dans ComfyUI-future).")
             return
 
@@ -1569,7 +995,7 @@ class App:
         import time as _time
         script = str(Path(__file__).parent / "analyze_dataset.py")
         try:
-            cmd = [COMFYUI_FUTURE_PY, script, folder, "full"]
+            cmd = [self.comfyui_py, script, folder, "full"]
             # On a besoin de cap_mode en position 4, donc ref doit etre en position 3 meme vide
             cmd.append(ref if ref else "")
             cmd.append(cap_mode)
@@ -2103,7 +1529,7 @@ class App:
                 })
 
                 proc = subprocess.Popen(
-                    [COMFYUI_FUTURE_PY, "-c", driver],
+                    [self.comfyui_py, "-c", driver],
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE, text=True, encoding="utf-8",
                 )
@@ -2414,7 +1840,7 @@ class App:
                         )
                         payload = json.dumps({"folder": str(masks_target)})
                         proc = subprocess.Popen(
-                            [COMFYUI_FUTURE_PY, "-c", driver],
+                            [self.comfyui_py, "-c", driver],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True, encoding="utf-8",
                         )
@@ -2587,6 +2013,17 @@ class App:
         d = filedialog.askdirectory(initialdir=var.get())
         if d:
             var.set(d.replace("/", "\\"))
+
+    def _pick_file(self, var):
+        cur = var.get()
+        initdir = str(Path(cur).parent) if cur and Path(cur).parent.exists() else None
+        f = filedialog.askopenfilename(
+            initialdir=initdir,
+            title="Choisir python.exe de ComfyUI",
+            filetypes=[("Python executable", "python*.exe"), ("Tous", "*.*")],
+        )
+        if f:
+            var.set(f.replace("/", "\\"))
 
     def _load_preview_image(self, path, max_size=200):
         """Charge une image en PhotoImage Tk en gardant le ratio. Retourne None si echec."""
@@ -2935,21 +2372,29 @@ class App:
         for k, v in self.entries.items():
             self.cfg[k] = v.get()
         save_config(self.cfg)
-        self.refresh_loras()
-        messagebox.showinfo("Sauvegarde", "Config enregistree.")
+        # Applique a chaud le nouveau chemin Python ComfyUI
+        self.comfyui_py = self.cfg.get("comfyui_python") or COMFYUI_FUTURE_PY
+        # Met a jour le dossier datasets par defaut dans l'analyseur (si vide)
+        if hasattr(self, "analyzer_path") and self.cfg.get("datasets_dir"):
+            if not self.analyzer_path.get().strip():
+                self.analyzer_path.set(self.cfg["datasets_dir"])
+        messagebox.showinfo("Sauvegarde", "Config enregistrée.")
 
     def _reset_cfg(self):
         for k, v in DEFAULT_CONFIG.items():
-            self.entries[k].set(v)
+            if k in self.entries:
+                self.entries[k].set(v)
 
 
 if __name__ == "__main__":
     cfg = load_config()
-    for k in ("loras_active", "loras_backup", "outputs", "inputs"):
-        try:
-            Path(cfg[k]).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            pass  # Disque externe debranche ou autre - on continue
+    # Pre-cree le dossier datasets par defaut s'il n'existe pas
+    try:
+        d = cfg.get("datasets_dir")
+        if d:
+            Path(d).mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
     root = Tk()
     app = App(root)
     # Argument --tab <name> pour ouvrir directement sur un onglet

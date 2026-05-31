@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.2] — 2026-05-31
+
+### Removed
+- **Stripped all non-LoRA features.** The app was originally a general
+  "AI File Manager" with extra tabs. Removed the **LoRAs management**,
+  **Outputs browser**, **Inputs browser**, and **Prompt optimizer (Ollama)**
+  tabs and all their code. The tool is now a focused 3-tab app:
+  📊 Dataset Analyzer · 📊 Evaluate LoRA · ⚙ Config.
+- Removed orphaned module-level helpers (`PROMPT_SYSTEMS`, `list_files`,
+  `fmt_size`, `LORA_EXTS`, `IMAGE_EXTS`, `MEDIA_EXTS`).
+
+### Changed
+- **ComfyUI Python path is now configurable** in the ⚙ Config tab
+  (previously hard-coded). Essential for anyone whose ComfyUI install
+  differs from the original author's. Applied hot, no restart needed.
+- Config tab now exposes two settings: **ComfyUI python.exe** (file picker)
+  and **default datasets folder** (folder picker), instead of the old
+  loras/outputs/inputs paths.
+- Window title and header renamed to "LoRA Dataset Coach".
+- Documentation updated to describe the 3-tab layout.
+
+---
+
 ## [v1.0.1] — 2026-05-31
 
 ### Added
