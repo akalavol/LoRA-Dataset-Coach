@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.7] — 2026-05-31
+
+### Fixed (regression)
+- **The results table and bottom summary were never filled after an analysis.**
+  That display code had ended up inside `_move_rejected_photos` by mistake, so
+  it only ran if you moved rejects. Moved it into its own
+  `_populate_results_table` method, called at the end of every analysis.
+
+### Added
+- **Auto-save after every analysis.** Two files are now written to the dataset
+  folder automatically:
+  - `_analysis_report.json` — the full result (re-loadable, shareable)
+  - `_analysis_report.txt` — a readable summary (grade, action plan, per-target
+    scores, recommendations, per-image table)
+  Nothing is lost anymore, even if you close the app.
+- **The global grade is now shown at the top of the bottom summary**
+  (`🏆 NOTE : A (EXCELLENT)`), in addition to the big verdict block above.
+
+---
+
 ## [v1.0.6] — 2026-05-31
 
 ### Fixed (critical)

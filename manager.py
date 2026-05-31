@@ -1398,6 +1398,75 @@ class App:
                                   diversity=s.get("diversity", {}),
                                   ar_distribution=s.get("aspect_ratio_distribution", {}))
 
+        # Remplit le résumé du bas (avec la NOTE) + le tableau détaillé
+        self._populate_results_table(data)
+
+        # Enregistre automatiquement le rapport dans le dossier dataset
+        self._autosave_report(data)
+
+    def _autosave_report(self, data):
+        """Sauve le rapport (JSON complet + résumé .txt lisible) dans le dataset.
+        Évite de tout reperdre et permet de relire / partager l'analyse."""
+        try:
+            folder = Path(self.analyzer_path.get())
+            if not folder.is_dir():
+                return
+            s = data.get("summary", {})
+            verdict = s.get("verdict") or {}
+
+            # 1) JSON complet (rechargeable)
+            json_path = folder / "_analysis_report.json"
+            json_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8")
+
+            # 2) Résumé .txt lisible
+            lines = []
+            lines.append("=" * 60)
+            lines.append(f"RAPPORT D'ANALYSE LoRA — {folder.name}")
+            lines.append(f"Généré le {datetime.now():%Y-%m-%d %H:%M:%S}")
+            lines.append("=" * 60)
+            lines.append("")
+            lines.append(f"NOTE GLOBALE : {verdict.get('grade','?')} "
+                         f"({verdict.get('grade_desc','')})")
+            lines.append(f"  {s.get('lora_viable',0)} viables · "
+                         f"{s.get('lora_borderline',0)} borderline · "
+                         f"{s.get('lora_unusable',0)} à virer "
+                         f"(sur {s.get('total_images',0)} images)")
+            lines.append(f"  Cohérence visage : {s.get('overall_face_coherence','N/A')} · "
+                         f"corps : {s.get('overall_body_coherence','N/A')}")
+            if verdict.get("actions"):
+                lines.append("")
+                lines.append("PLAN D'ACTION :")
+                for a in verdict["actions"]:
+                    lines.append(f"  • {a}")
+            # Meilleur target
+            tscores = s.get("target_scores") or {}
+            if tscores:
+                lines.append("")
+                lines.append("SCORES PAR TARGET :")
+                for fam, sc in tscores.items():
+                    lines.append(f"  {sc.get('grade','?'):>3}  {sc.get('score',0):>3}/100  {fam}")
+            lines.append("")
+            lines.append("RECOMMANDATIONS :")
+            for r in data.get("recommendations", []):
+                lines.append(f"  {r}")
+            lines.append("")
+            lines.append("-" * 60)
+            lines.append(f"{'IMAGE':<28} {'VIABLE':<10} RAISON")
+            lines.append("-" * 60)
+            for img in data.get("images", []):
+                lines.append(f"{img.get('name','?')[:27]:<28} "
+                             f"{str(img.get('lora_viable','?')):<10} "
+                             f"{img.get('lora_reason','')}")
+            txt_path = folder / "_analysis_report.txt"
+            txt_path.write_text("\n".join(lines), encoding="utf-8")
+
+            self.status_var.set(f"📄 Rapport enregistré : {json_path.name} + {txt_path.name}")
+        except Exception as e:
+            # L'auto-save ne doit jamais faire planter l'affichage
+            print(f"Auto-save report failed: {e}")
+
     def _show_verdict_block(self, verdict, ref_info=None, ref_match=None,
                               overfit_alerts=None, top_tags=None,
                               target_scores=None, diversity=None,
@@ -2100,12 +2169,18 @@ class App:
         self.analyzer_move_btn.config(state="disabled", bg=CARD_HI, fg=TEXT_DIM,
                                       text="🗑 Relance l'analyse")
 
+    def _populate_results_table(self, data):
+        """Remplit le résumé du bas (NOTE globale + stats + recommandations) et
+        le tableau détaillé. Appelé à la fin de chaque analyse."""
         if "error" in data:
             self.analyzer_summary.config(text=f"❌ {data['error']}", fg=RED)
             return
 
         s = data.get("summary", {})
         recos = data.get("recommendations", [])
+        verdict = s.get("verdict") or {}
+        grade = verdict.get("grade", "?")
+        grade_desc = verdict.get("grade_desc", "")
         body_coh = s.get('overall_body_coherence')
         dup_count = s.get('duplicates_count', 0)
         cap_count = s.get('captions_written', 0)
@@ -2121,6 +2196,7 @@ class App:
         if art_high > 0:
             extra += f"  |  ❌ {art_high} artefacts sévères"
         summary_text = (
+            f"🏆 NOTE : {grade}  ({grade_desc})\n"
             f"📊 {s.get('total_images', 0)} images  |  "
             f"✅ {s.get('lora_viable', 0)} viables  |  "
             f"⚠️ {s.get('lora_borderline', 0)} borderline  |  "

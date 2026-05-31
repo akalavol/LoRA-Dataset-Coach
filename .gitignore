@@ -16,8 +16,10 @@ config.local.json
 _update_tmp/
 _backup_before_update/
 
-# Cache files generated in datasets
+# Cache + auto-saved reports generated in datasets
 .analyzer_cache.json
+_analysis_report.json
+_analysis_report.txt
 
 # OS
 .DS_Store
