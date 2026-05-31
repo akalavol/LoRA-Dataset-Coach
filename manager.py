@@ -972,6 +972,54 @@ class App:
                                       command=self._apply_update)
         self.upd_apply_btn.pack(side="left", padx=5)
 
+        # ===== Section CHANGELOG (Journal des nouveautés) =====
+        Label(frame, text="Journal des nouveautés",
+              font=FONT_H1, fg=TEXT, bg=BG).pack(anchor="w", pady=(25, 5))
+        Label(frame, text="Toutes les modifications, ajouts et corrections de chaque version.",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=BG).pack(anchor="w", pady=(0, 8))
+
+        chg_card = Frame(frame, bg=CARD, padx=14, pady=12)
+        chg_card.pack(fill="both", expand=True, pady=4)
+
+        chg_header = Frame(chg_card, bg=CARD)
+        chg_header.pack(fill="x", pady=(0, 6))
+        Label(chg_header, text="📋 CHANGELOG.md", font=FONT_BODY,
+              fg=ACCENT2, bg=CARD).pack(side="left")
+        make_button(chg_header, "🔄 Recharger",
+                     self._load_changelog).pack(side="right", padx=4)
+        make_button(chg_header, "🌐 Voir sur GitHub",
+                     lambda: self._open_url(
+                         "https://github.com/akalavol/LoRA-Dataset-Coach/blob/main/CHANGELOG.md"
+                     )).pack(side="right", padx=4)
+
+        chg_scroll_frame = Frame(chg_card, bg=CARD)
+        chg_scroll_frame.pack(fill="both", expand=True)
+        self.changelog_text = Text(
+            chg_scroll_frame, bg=BG2, fg=TEXT, font=FONT_MONO,
+            relief="flat", padx=8, pady=8, wrap="word", height=18,
+            insertbackground=TEXT,
+        )
+        chg_sb = ttk.Scrollbar(chg_scroll_frame, orient="vertical",
+                                 command=self.changelog_text.yview)
+        self.changelog_text.configure(yscrollcommand=chg_sb.set)
+        self.changelog_text.pack(side="left", fill="both", expand=True)
+        chg_sb.pack(side="right", fill="y")
+
+        # Tags coloration markdown basique
+        self.changelog_text.tag_configure("h1", foreground=ACCENT,
+                                            font=("Segoe UI", 14, "bold"),
+                                            spacing1=12, spacing3=4)
+        self.changelog_text.tag_configure("h2", foreground=ACCENT2,
+                                            font=("Segoe UI", 12, "bold"),
+                                            spacing1=10, spacing3=4)
+        self.changelog_text.tag_configure("h3", foreground=GREEN,
+                                            font=("Segoe UI", 11, "bold"),
+                                            spacing1=6, spacing3=2)
+        self.changelog_text.tag_configure("bullet", foreground=TEXT_DIM)
+
+        # Charge le contenu initial
+        self._load_changelog()
+
     def _check_for_updates(self):
         self.upd_status.config(text="🔍 Vérification en cours…", fg=TEXT_DIM)
         self.upd_apply_btn.config(state="disabled", bg=CARD_HI, fg=TEXT_DIM)
@@ -1038,9 +1086,59 @@ class App:
                 fg=GREEN)
             messagebox.showinfo("Mise à jour OK",
                                   "Mise à jour appliquée. Ferme et relance l'application.")
+            # Auto-refresh changelog après update réussi
+            try:
+                self._load_changelog()
+            except Exception:
+                pass
         else:
             self.upd_status.config(text=f"❌ {result['message']}", fg=RED)
             self.upd_apply_btn.config(state="normal", bg=GREEN, fg=BG)
+
+    def _open_url(self, url):
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir l'URL :\n{e}")
+
+    def _load_changelog(self):
+        """Charge CHANGELOG.md depuis le disque local, fallback sur GitHub."""
+        if not hasattr(self, "changelog_text"):
+            return
+        chg_path = Path(__file__).parent / "CHANGELOG.md"
+        content = ""
+        if chg_path.is_file():
+            try:
+                content = chg_path.read_text(encoding="utf-8")
+            except Exception:
+                content = ""
+
+        # Fallback : télécharge depuis GitHub si CHANGELOG.md manquant
+        if not content:
+            try:
+                url = "https://raw.githubusercontent.com/akalavol/LoRA-Dataset-Coach/main/CHANGELOG.md"
+                with urllib.request.urlopen(url, timeout=8) as resp:
+                    content = resp.read().decode("utf-8")
+            except Exception as e:
+                content = f"Impossible de charger CHANGELOG.md :\n{e}\n\n" \
+                           f"Visite directement le repo GitHub."
+
+        # Rendu markdown basique avec coloration
+        self.changelog_text.config(state="normal")
+        self.changelog_text.delete("1.0", "end")
+        for line in content.splitlines():
+            if line.startswith("# "):
+                self.changelog_text.insert("end", line[2:] + "\n", "h1")
+            elif line.startswith("## "):
+                self.changelog_text.insert("end", line[3:] + "\n", "h2")
+            elif line.startswith("### "):
+                self.changelog_text.insert("end", line[4:] + "\n", "h3")
+            elif line.startswith("- ") or line.startswith("  - "):
+                self.changelog_text.insert("end", line + "\n", "bullet")
+            else:
+                self.changelog_text.insert("end", line + "\n")
+        self.changelog_text.config(state="disabled")
 
     # ============================================================
     # PROMPT OPTIMIZER (via Ollama gemma4)

@@ -2,7 +2,7 @@
 
 > The 2026-grade Swiss army knife for preparing, validating and evaluating LoRA training datasets — for **photo (SDXL, Flux, SD 3.5, Pony, Illustrious, NoobAI...)** and **video (Wan 2.x, HunyuanVideo, LTX-Video, CogVideoX, Mochi, Open-Sora)** models.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/license-Source--Available-orange.svg)](LICENSE)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)
 ![Status](https://img.shields.io/badge/status-A--grade-brightgreen.svg)
 
@@ -237,4 +237,22 @@ PRs welcome. Major directions where help is appreciated:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+This project uses a **source-available license** with a small-entity commercial
+tier and a paid commercial tier — see [LICENSE](LICENSE) for the full text.
+
+**Quick summary** (non-binding):
+
+| Use case | Free under this license |
+|---|---|
+| Personal / hobby / research / educational | ✅ Yes |
+| Freelancers and sole proprietors | ✅ Yes |
+| Companies with **fewer than 5 employees** | ✅ Yes |
+| Companies with **5 or more employees** (commercial use) | ❌ Needs a paid commercial license |
+| Repackaging as a competing product | ❌ Not allowed |
+
+For a commercial license inquiry, open an issue tagged
+[`commercial-license-inquiry`](https://github.com/akalavol/LoRA-Dataset-Coach/issues/new?labels=commercial-license-inquiry).
+
+Third-party models downloaded at runtime (Florence-2, JoyCaption, WD14,
+sdxl-detector, BriaRMBG, InsightFace) are licensed under their own terms,
+which you must comply with independently.
