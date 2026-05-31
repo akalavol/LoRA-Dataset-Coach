@@ -67,6 +67,8 @@ DEFAULT_CONFIG = {
     "comfyui_python": COMFYUI_FUTURE_PY,
     # Default folder pre-filled in the analyzer
     "datasets_dir": "C:\\AI\\datasets",
+    # Compute device: "auto" (GPU si dispo) | "cuda" | "cpu"
+    "device": "auto",
 }
 
 
@@ -329,6 +331,7 @@ class App:
             cmd = [self.comfyui_py, script, gen, ref]
             if train:
                 cmd.append(train)
+            cmd.append(self.cfg.get("device", "auto"))  # auto/cuda/cpu
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, encoding="utf-8", bufsize=1,
@@ -521,6 +524,27 @@ class App:
             else:
                 make_button(entry_row, "📂", lambda v=var: self._pick_folder(v)).pack(side="left")
             self.entries[key] = var
+
+        # ===== Sélecteur de device (CPU / GPU) =====
+        dev_card = Frame(frame, bg=CARD, padx=14, pady=12)
+        dev_card.pack(fill="x", pady=4)
+        dev_top = Frame(dev_card, bg=CARD)
+        dev_top.pack(fill="x")
+        Label(dev_top, text="⚡", font=FONT_EMOJI, fg=ACCENT2, bg=CARD).pack(side="left", padx=(0, 10))
+        Label(dev_top, text="Calcul (device)", font=FONT_H1, fg=TEXT, bg=CARD).pack(side="left")
+        Label(dev_top, text="auto = GPU si dispo (recommandé)",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=CARD).pack(side="left", padx=10)
+
+        dev_row = Frame(dev_card, bg=CARD)
+        dev_row.pack(fill="x", pady=(8, 0))
+        self.device_var = StringVar(value=self.cfg.get("device", "auto"))
+        for val, lbl in (("auto", "Auto (GPU si dispo)"),
+                          ("cuda", "Forcer GPU (CUDA)"),
+                          ("cpu", "Forcer CPU")):
+            tk.Radiobutton(dev_row, text=lbl, variable=self.device_var, value=val,
+                            font=FONT_BODY, fg=TEXT, bg=CARD, selectcolor=BG2,
+                            activebackground=CARD, activeforeground=TEXT).pack(side="left", padx=10)
+        self.entries["device"] = self.device_var
 
         btn_row = Frame(frame, bg=BG)
         btn_row.pack(pady=25)
@@ -1049,7 +1073,9 @@ class App:
         # Démarre le ticker d'activité (montre que ça vit pendant le chargement)
         self._analyzer_tick()
 
-        threading.Thread(target=self._analyze_subprocess, args=(folder, ref, cap_mode), daemon=True).start()
+        dev = self.cfg.get("device", "auto")
+        threading.Thread(target=self._analyze_subprocess,
+                          args=(folder, ref, cap_mode, dev), daemon=True).start()
 
     def _analyzer_tick(self):
         """Tick chaque seconde : affiche le temps écoulé tant que l'analyse tourne
@@ -1079,14 +1105,15 @@ class App:
         # Reprogramme
         self.root.after(1000, self._analyzer_tick)
 
-    def _analyze_subprocess(self, folder, ref="", cap_mode="wd14"):
+    def _analyze_subprocess(self, folder, ref="", cap_mode="wd14", device="auto"):
         import time as _time
         script = str(Path(__file__).parent / "analyze_dataset.py")
         try:
             cmd = [self.comfyui_py, script, folder, "full"]
-            # On a besoin de cap_mode en position 4, donc ref doit etre en position 3 meme vide
+            # argv: folder(1) full(2) ref(3) cap(4) device(5)
             cmd.append(ref if ref else "")
             cmd.append(cap_mode)
+            cmd.append(device)
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,

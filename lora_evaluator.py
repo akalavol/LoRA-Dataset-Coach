@@ -28,7 +28,7 @@ from pathlib import Path
 
 def evaluate_lora(generated_folder, reference_folder,
                    training_folder=None, output_json=None,
-                   progress_cb=None):
+                   progress_cb=None, device="auto"):
     """
     generated_folder  : Le dossier contenant N images generees par ton LoRA
                          (lance ton workflow ComfyUI 30 fois avec varying seeds)
@@ -69,6 +69,7 @@ def evaluate_lora(generated_folder, reference_folder,
         import numpy as np
         from PIL import Image
         from insightface.app import FaceAnalysis
+        import onnxruntime as ort
     except ImportError as e:
         return {"error": f"Missing module: {e}"}
 
@@ -95,10 +96,24 @@ def evaluate_lora(generated_folder, reference_folder,
         try: yield
         finally: sys.stdout = old
 
+    # Device : GPU si dispo (l'evaluateur ne fait que de l'embedding visage)
+    want_cuda = False
+    if device == "cuda":
+        want_cuda = True
+    elif device == "auto":
+        try:
+            want_cuda = ("CUDAExecutionProvider" in ort.get_available_providers())
+        except Exception:
+            want_cuda = False
+    providers = (["CUDAExecutionProvider", "CPUExecutionProvider"]
+                 if want_cuda else ["CPUExecutionProvider"])
+    ctx = 0 if want_cuda else -1
+    print(f"STEP Device : {'CUDA' if want_cuda else 'CPU'}", file=sys.stderr, flush=True)
+
     with redirect():
         app = FaceAnalysis(name="antelopev2", root=insight_root,
-                            providers=["CPUExecutionProvider"])
-        app.prepare(ctx_id=0, det_size=(640, 640))
+                            providers=providers)
+        app.prepare(ctx_id=ctx, det_size=(640, 640))
 
     def embed_folder(files, label):
         embs = []
@@ -328,9 +343,17 @@ if __name__ == "__main__":
         print("Usage: lora_evaluator.py <generated_folder> <reference_folder> "
               "[training_folder] [output.json]")
         sys.exit(1)
-    gen = sys.argv[1]
-    ref = sys.argv[2]
-    train = sys.argv[3] if len(sys.argv) > 3 else None
-    out = sys.argv[4] if len(sys.argv) > 4 else None
-    result = evaluate_lora(gen, ref, training_folder=train, output_json=out)
+    # Extrait un eventuel device (auto/cuda/cpu) n'importe ou dans les args
+    args = sys.argv[1:]
+    device = "auto"
+    for d in ("auto", "cuda", "cpu"):
+        if d in args:
+            device = d
+            args.remove(d)
+            break
+    gen = args[0]
+    ref = args[1]
+    train = args[2] if len(args) > 2 and args[2] else None
+    out = args[3] if len(args) > 3 and args[3] else None
+    result = evaluate_lora(gen, ref, training_folder=train, output_json=out, device=device)
     print(json.dumps(result, ensure_ascii=False, indent=2))

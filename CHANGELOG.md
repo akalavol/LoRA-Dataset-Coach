@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.4] — 2026-05-31
+
+### Fixed (big performance win)
+- **insightface face detection and CLIP (body + expression) were pinned to
+  CPU** even when a CUDA GPU was available. They now run on the GPU when one
+  is present. Since both run on *every* image, this is a ~3-5× speedup on
+  those stages — meaningful for every analysis, large or small.
+
+### Added
+- **Device selector in the ⚙ Config tab**: `Auto (GPU if available)` /
+  `Force GPU (CUDA)` / `Force CPU`.
+  - `auto` (default) uses the GPU when present, falls back to CPU otherwise.
+  - `cpu` is useful when the GPU is busy (e.g. ComfyUI is generating) — it
+    hides the GPU from the whole subprocess (torch + onnxruntime + all
+    captioners) via `CUDA_VISIBLE_DEVICES`.
+  - `cuda` forces GPU but safely falls back to CPU if no GPU is actually
+    detected (no crash).
+- The chosen device is shown in the progress log (`⚙ Device : CUDA …`).
+- Device preference is honored by the analyzer AND the LoRA evaluator.
+
+### Note on CPU+GPU "coupling"
+True data-parallel CPU+GPU splitting was considered and rejected: the CPU is
+~4× slower than the GPU on these models, so it would only add ~25% throughput
+while doubling memory use and adding a lot of fragile scheduling code. Putting
+the always-run models on the GPU (this release) is the far better lever.
+
+---
+
 ## [v1.0.3] — 2026-05-31
 
 ### Fixed

@@ -59,6 +59,40 @@ def hamming_distance(h1, h2):
     return bin(h1 ^ h2).count("1")
 
 
+def resolve_device(pref="auto"):
+    """Retourne ('cuda'|'cpu', onnx_providers).
+    pref = 'auto' | 'cuda' | 'cpu'.
+    """
+    want_cuda = False
+    if pref in ("cuda", "auto"):
+        # Dans les deux cas on verifie que torch CUDA est REELLEMENT dispo
+        # (sinon clip_model.to('cuda') planterait). 'cuda' force = meme garde-fou.
+        try:
+            import torch
+            want_cuda = torch.cuda.is_available()
+        except Exception:
+            try:
+                import onnxruntime as ort
+                want_cuda = "CUDAExecutionProvider" in ort.get_available_providers()
+            except Exception:
+                want_cuda = False
+        if pref == "cuda" and not want_cuda:
+            print("STEP ⚠ device=cuda demandé mais aucun GPU CUDA détecté — repli sur CPU",
+                  file=sys.stderr, flush=True)
+
+    if want_cuda:
+        # Verifie que onnxruntime a bien le provider CUDA dispo
+        onnx_providers = ["CPUExecutionProvider"]
+        try:
+            import onnxruntime as ort
+            if "CUDAExecutionProvider" in ort.get_available_providers():
+                onnx_providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        except Exception:
+            pass
+        return "cuda", onnx_providers
+    return "cpu", ["CPUExecutionProvider"]
+
+
 # ============================================================
 # Scores par target : evalue le dataset pour chaque type de LoRA
 # ============================================================
@@ -268,7 +302,7 @@ def save_cache(folder, cache_dict):
 
 
 def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
-             ai_detection=True):
+             ai_detection=True, device="auto"):
     """
     captioner_mode :
       - "wd14"       : tags booru (SDXL/SD1.5/Kohya) - rapide, ONNX
@@ -282,6 +316,11 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
       - WD14 tags -> artefacts anatomiques
       - C2PA/IPTC/EXIF metadata
     """
+    # Si l'utilisateur force le CPU, on masque le GPU pour TOUT (torch + onnx +
+    # tous les captioners) avant le moindre import lourd.
+    if device == "cpu":
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
     folder = Path(folder)
     if not folder.is_dir():
         return {"error": f"Folder not found: {folder}"}
@@ -304,6 +343,12 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
     except ImportError as e:
         return {"error": f"Module manquant : {e}"}
 
+    # Resolution du device (GPU si dispo) - partage par insightface + CLIP
+    torch_device, onnx_providers = resolve_device(device)
+    print(f"STEP Device : {torch_device.upper()} "
+          f"(onnx: {', '.join(p.replace('ExecutionProvider','') for p in onnx_providers)})",
+          file=sys.stderr, flush=True)
+
     # Init insightface (utilise antelopev2 deja installe pour InstantID)
     # On cherche le dossier dans plusieurs emplacements possibles
     insight_roots = [
@@ -325,15 +370,17 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                      "ou copie les .onnx manuellement."
         }
 
-    print("STEP Chargement du modèle de détection de visage (insightface antelopev2)...",
+    print(f"STEP Chargement du modèle de détection de visage (insightface antelopev2, {torch_device.upper()})...",
           file=sys.stderr, flush=True)
     try:
         # Redirige les prints d'insightface vers stderr pour pas polluer le JSON
         with redirect_stdout_to_stderr():
             app = FaceAnalysis(name="antelopev2",
                               root=insight_root,
-                              providers=["CPUExecutionProvider"])
-            app.prepare(ctx_id=0, det_size=(640, 640))
+                              providers=onnx_providers)
+            # ctx_id >= 0 = GPU, -1 = CPU pour insightface
+            ctx = 0 if torch_device == "cuda" else -1
+            app.prepare(ctx_id=ctx, det_size=(640, 640))
         print("STEP Modèle visage prêt.", file=sys.stderr, flush=True)
     except Exception as e:
         import traceback
@@ -377,17 +424,23 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                          "laughing", "serious focused look", "surprised", "sad"]
     expr_text_features = None
     try:
-        print("STEP Chargement CLIP pour analyse corps + expressions...", file=sys.stderr, flush=True)
+        print(f"STEP Chargement CLIP pour analyse corps + expressions ({torch_device.upper()})...",
+              file=sys.stderr, flush=True)
         with redirect_stdout_to_stderr():
             from transformers import CLIPModel, CLIPProcessor
             import torch
             clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
             clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
             clip_model.eval()
+            # Place le modele sur le GPU si dispo
+            if torch_device == "cuda":
+                clip_model = clip_model.to("cuda")
             # Pre-calcule les embeddings texte des expressions (une fois)
             with torch.no_grad():
                 txt_inp = clip_processor(text=[f"a photo of a person with {e}" for e in expression_labels],
                                          return_tensors="pt", padding=True)
+                if torch_device == "cuda":
+                    txt_inp = {k: v.to("cuda") for k, v in txt_inp.items()}
                 tf = clip_model.get_text_features(**txt_inp)
                 # Selon la version de transformers, get_text_features peut retourner un tensor OU un objet
                 if not hasattr(tf, "norm"):
@@ -681,6 +734,8 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                     face_crop = pil_img.crop((x1, y1, x2, y2))
                     with torch.no_grad():
                         inputs = clip_processor(images=face_crop, return_tensors="pt")
+                        if torch_device == "cuda":
+                            inputs = {k: v.to("cuda") for k, v in inputs.items()}
                         face_feats = clip_model.get_image_features(**inputs)
                         if not hasattr(face_feats, "norm"):
                             if hasattr(face_feats, "image_embeds") and face_feats.image_embeds is not None:
@@ -717,6 +772,8 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                     # Embedding CLIP
                     with torch.no_grad():
                         inputs = clip_processor(images=body_crop, return_tensors="pt")
+                        if torch_device == "cuda":
+                            inputs = {k: v.to("cuda") for k, v in inputs.items()}
                         feats = clip_model.get_image_features(**inputs)
                         if not hasattr(feats, "norm"):
                             if hasattr(feats, "image_embeds") and feats.image_embeds is not None:
@@ -726,7 +783,7 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                             else:
                                 feats = feats.last_hidden_state.mean(dim=1)
                         feats = feats / feats.norm(dim=-1, keepdim=True)  # normalise
-                        body_embeddings.append(feats[0].numpy())
+                        body_embeddings.append(feats[0].cpu().numpy())
                 except Exception as e:
                     entry["body_error"] = str(e)[:80]
                     body_embeddings.append(None)
@@ -1720,6 +1777,7 @@ if __name__ == "__main__":
     folder = sys.argv[1]
     mode = sys.argv[2] if len(sys.argv) > 2 else "full"
     ref = sys.argv[3] if len(sys.argv) > 3 else None
-    cap = sys.argv[4] if len(sys.argv) > 4 else "wd14"  # wd14 / natural / both
-    result = analyze(folder, mode, ref_image=ref, captioner_mode=cap)
+    cap = sys.argv[4] if len(sys.argv) > 4 else "wd14"  # wd14 / natural / both / joycaption / all
+    dev = sys.argv[5] if len(sys.argv) > 5 else "auto"  # auto / cuda / cpu
+    result = analyze(folder, mode, ref_image=ref, captioner_mode=cap, device=dev)
     print(json.dumps(result, ensure_ascii=False, indent=2, cls=NpEncoder))
