@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.10] — 2026-05-31
+
+### Fixed (critical) — the in-app updater did nothing
+The zip-based updater downloaded the new release but **copied 0 files**, so
+after "updating" and restarting you were still on the old version. Two bugs:
+- The file-exclusion check tested the *absolute* path, which always contains
+  the temp folder name `_update_tmp` → **every** file was skipped.
+- The extracted folder was detected with `next(iterdir())`, which could return
+  the downloaded `release.zip` instead of the source folder.
+
+Both fixed: extraction now goes to a dedicated subfolder, exclusion is checked
+on the *relative* path, the new VERSION is read back and shown in the success
+message, and the updater reports a real failure if nothing was copied.
+
+> ⚠️ Because the **broken** updater ships in ≤ 1.0.9, those versions can't
+> self-update to this fix. Update **once manually** (re-download the latest
+> release zip), then the in-app updater works for all future versions.
+
+---
+
 ## [v1.0.9] — 2026-05-31
 
 ### Fixed / Improved — analysis cache

@@ -125,64 +125,83 @@ def apply_update_git() -> dict:
 
 
 def apply_update_zip(zipball_url: str, backup: bool = True) -> dict:
-    """Download the release zipball, replace .py files in install. Returns {success, message}."""
+    """Download the release zipball, replace files in the install. Returns {success, message}."""
     root = Path(__file__).parent
     tmp_dir = root / "_update_tmp"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir, ignore_errors=True)
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
+    # Extraction dans un sous-dossier dédié, et le zip téléchargé À PART,
+    # pour ne pas confondre les deux.
+    extract_dir = tmp_dir / "extracted"
+    extract_dir.mkdir(parents=True, exist_ok=True)
     zip_path = tmp_dir / "release.zip"
+
     try:
         req = urllib.request.Request(
             zipball_url, headers={"User-Agent": "LoRA-Dataset-Coach-Updater"}
         )
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=120) as resp:
             zip_path.write_bytes(resp.read())
     except Exception as e:
-        return {"success": False, "message": f"Download failed: {e}"}
+        return {"success": False, "message": f"Téléchargement échoué : {e}"}
 
     try:
         with zipfile.ZipFile(zip_path) as zf:
-            zf.extractall(tmp_dir)
+            zf.extractall(extract_dir)
     except Exception as e:
-        return {"success": False, "message": f"Unzip failed: {e}"}
+        return {"success": False, "message": f"Décompression échouée : {e}"}
 
-    # The zipball extracts into akalavol-LoRA-Dataset-Coach-<sha>/
-    extracted_root = next(tmp_dir.iterdir(), None)
-    if extracted_root is None or not extracted_root.is_dir():
-        return {"success": False, "message": "Unexpected zip layout"}
+    # GitHub enveloppe tout dans un dossier akalavol-LoRA-Dataset-Coach-<sha>/
+    # On prend le SEUL sous-dossier de extract_dir (en ignorant tout fichier).
+    sub_dirs = [d for d in extract_dir.iterdir() if d.is_dir()]
+    extracted_root = sub_dirs[0] if sub_dirs else extract_dir
 
-    # Backup current .py files
+    # Fichiers qu'on NE doit jamais écraser (config locale de l'utilisateur)
+    PROTECTED = {"config.json", "config.local.json"}
+
+    # Backup des .py actuels
     backup_dir = root / "_backup_before_update"
     if backup:
         if backup_dir.exists():
             shutil.rmtree(backup_dir, ignore_errors=True)
         backup_dir.mkdir()
         for py in root.glob("*.py"):
-            shutil.copy2(py, backup_dir / py.name)
+            try:
+                shutil.copy2(py, backup_dir / py.name)
+            except Exception:
+                pass
 
-    # Copy new files
+    # Copie les nouveaux fichiers
     replaced = []
     for src in extracted_root.rglob("*"):
         if not src.is_file():
             continue
-        # Skip files we should NOT overwrite
-        if src.name in (".gitignore", "LICENSE", "VERSION"):
-            pass  # we DO want to overwrite VERSION
-        if any(part in (".git", "__pycache__", "_update_tmp", "_backup_before_update")
-               for part in src.parts):
-            continue
         rel_path = src.relative_to(extracted_root)
+        # L'exclusion porte sur le chemin RELATIF (pas sur src qui contient _update_tmp !)
+        if any(part in (".git", "__pycache__") for part in rel_path.parts):
+            continue
+        if rel_path.name in PROTECTED:
+            continue
         dst = root / rel_path
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
-        replaced.append(str(rel_path))
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+            replaced.append(str(rel_path))
+        except Exception as e:
+            # Un .py verrouillé/illisible ne doit pas tout casser
+            print(f"Skip {rel_path}: {e}", file=sys.stderr)
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    if not replaced:
+        return {"success": False,
+                "message": "Aucun fichier copié (archive vide ou structure inattendue)."}
+
+    new_ver = get_current_version()  # relit le VERSION fraîchement écrit
     return {
         "success": True,
-        "message": f"Updated {len(replaced)} file(s). Backup: {backup_dir.name}/",
+        "message": f"{len(replaced)} fichier(s) mis à jour → version {new_ver}.\n"
+                   f"Backup dans {backup_dir.name}/",
         "replaced": replaced[:30],
     }
 
