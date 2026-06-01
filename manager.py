@@ -1396,7 +1396,9 @@ class App:
                                   top_tags=s.get("tag_frequency_top", []),
                                   target_scores=s.get("target_scores", {}),
                                   diversity=s.get("diversity", {}),
-                                  ar_distribution=s.get("aspect_ratio_distribution", {}))
+                                  ar_distribution=s.get("aspect_ratio_distribution", {}),
+                                  distribution=s.get("distribution", {}),
+                                  next_to_generate=s.get("next_to_generate", []))
 
         # Remplit le résumé du bas (avec la NOTE) + le tableau détaillé
         self._populate_results_table(data)
@@ -1435,6 +1437,28 @@ class App:
                          f"(sur {s.get('total_images',0)} images)")
             lines.append(f"  Cohérence visage : {s.get('overall_face_coherence','N/A')} · "
                          f"corps : {s.get('overall_body_coherence','N/A')}")
+            # Couverture des plans (types présents / manquants)
+            dist = s.get("distribution") or {}
+            if dist:
+                ang = dist.get("angles", {})
+                pln = dist.get("plans", {})
+                expr = dist.get("expressions", {})
+                lines.append("")
+                lines.append("COUVERTURE DES PLANS (viables) :")
+                lines.append(f"  Angles    : face {ang.get('front',0)} · "
+                             f"3/4 {ang.get('three_quarter',0)} · profil {ang.get('profil',0)}")
+                lines.append(f"  Cadrage   : gros plan {pln.get('face_only',0)} · "
+                             f"mi-corps {pln.get('both',0)} · plein pied {pln.get('body_only',0)}")
+                if expr:
+                    lines.append("  Expressions : " +
+                                 ", ".join(f"{k} ({v})" for k, v in sorted(expr.items(), key=lambda x:-x[1])))
+            # Photos a generer
+            n2g = s.get("next_to_generate") or []
+            if n2g:
+                lines.append("")
+                lines.append("PHOTOS A GENERER POUR COMPLETER :")
+                for sug in n2g:
+                    lines.append(f"  + {sug}")
             if verdict.get("actions"):
                 lines.append("")
                 lines.append("PLAN D'ACTION :")
@@ -1470,7 +1494,8 @@ class App:
     def _show_verdict_block(self, verdict, ref_info=None, ref_match=None,
                               overfit_alerts=None, top_tags=None,
                               target_scores=None, diversity=None,
-                              ar_distribution=None):
+                              ar_distribution=None, distribution=None,
+                              next_to_generate=None):
         # Vide le bloc precedent
         for w in self.analyzer_verdict_frame.winfo_children():
             w.destroy()
@@ -1597,7 +1622,76 @@ class App:
             Label(self.analyzer_verdict_frame, text=ar_txt,
                   font=FONT_BODY, fg=TEXT, bg=CARD, anchor="w").pack(fill="x", pady=2)
 
-        # Ligne 2 : plan d'action
+        # ===== COUVERTURE DES PLANS (types de photos présents / manquants) =====
+        if distribution:
+            ang = distribution.get("angles", {})
+            pln = distribution.get("plans", {})
+            expr = distribution.get("expressions", {})
+            n_viable_tot = max(1, sum(ang.values()) if ang else 0)
+
+            Label(self.analyzer_verdict_frame,
+                  text="📸 Couverture du dataset (photos viables) :",
+                  font=FONT_H1, fg=ACCENT2, bg=CARD, anchor="w").pack(fill="x", pady=(12, 4))
+
+            def cov_line(label, items, missing_msgs):
+                """items = [(nom, count, seuil_ok)] ; missing_msgs = liste de manques."""
+                row = Frame(self.analyzer_verdict_frame, bg=CARD)
+                row.pack(fill="x", pady=1)
+                Label(row, text=f"  {label} :", font=FONT_BODY, fg=TEXT_DIM, bg=CARD,
+                      width=14, anchor="w").pack(side="left")
+                for nom, cnt, ok in items:
+                    color = GREEN if ok else (YELLOW if cnt > 0 else RED)
+                    Label(row, text=f"{nom} {cnt}", font=FONT_BODY, fg=color, bg=CARD).pack(side="left", padx=6)
+                if missing_msgs:
+                    Label(row, text="  ❗ " + " · ".join(missing_msgs),
+                          font=FONT_SMALL, fg=RED, bg=CARD, anchor="w").pack(side="left", padx=8)
+
+            # --- Angles ---
+            front = ang.get("front", 0); tq = ang.get("three_quarter", 0); prof = ang.get("profil", 0)
+            miss_a = []
+            if prof == 0:
+                miss_a.append("aucun profil")
+            if tq < 3:
+                miss_a.append("peu de 3/4")
+            cov_line("Angles", [("face", front, front > 0),
+                                 ("3/4", tq, tq >= 3),
+                                 ("profil", prof, prof >= 2)], miss_a)
+
+            # --- Cadrage ---
+            fo = pln.get("face_only", 0); bo = pln.get("both", 0); bd = pln.get("body_only", 0)
+            miss_p = []
+            if bo == 0:
+                miss_p.append("aucun plan mi-corps")
+            if bd == 0 and n_viable_tot >= 20:
+                miss_p.append("aucun plein pied")
+            cov_line("Cadrage", [("gros plan", fo, fo > 0),
+                                  ("mi-corps", bo, bo >= 3),
+                                  ("plein pied", bd, bd >= 1)], miss_p)
+
+            # --- Expressions ---
+            if expr:
+                exp_items = sorted(expr.items(), key=lambda x: -x[1])
+                exp_txt = ", ".join(f"{k} ({v})" for k, v in exp_items[:5])
+                exp_color = GREEN if len(expr) >= 3 else YELLOW
+                erow = Frame(self.analyzer_verdict_frame, bg=CARD)
+                erow.pack(fill="x", pady=1)
+                Label(erow, text="  Expressions :", font=FONT_BODY, fg=TEXT_DIM, bg=CARD,
+                      width=14, anchor="w").pack(side="left")
+                Label(erow, text=exp_txt, font=FONT_BODY, fg=exp_color, bg=CARD,
+                      anchor="w", wraplength=700, justify="left").pack(side="left")
+                if len(expr) < 3:
+                    Label(erow, text="  ❗ peu varié", font=FONT_SMALL, fg=RED, bg=CARD).pack(side="left", padx=8)
+
+        # ===== À GÉNÉRER ENSUITE (manques concrets) =====
+        if next_to_generate:
+            Label(self.analyzer_verdict_frame, text="📷 Photos à générer pour compléter :",
+                  font=FONT_H1, fg=ACCENT, bg=CARD, anchor="w").pack(fill="x", pady=(10, 4))
+            for sug in next_to_generate:
+                Label(self.analyzer_verdict_frame, text=f"  ➕ {sug}",
+                      font=FONT_BODY, fg=YELLOW, bg=CARD,
+                      anchor="w", wraplength=900, justify="left").pack(fill="x")
+
+        # Ligne finale : plan d'action global (cleanup, training…)
         if actions:
             Label(self.analyzer_verdict_frame, text="🎯 Plan d'action :",
                   font=FONT_H1, fg=ACCENT, bg=CARD, anchor="w").pack(fill="x", pady=(10, 4))

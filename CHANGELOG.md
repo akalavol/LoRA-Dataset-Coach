@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.8] — 2026-05-31
+
+### Fixed
+- **PDF export crash** on Unicode characters (e.g. the `→` arrow, `≥`, `°`,
+  emoji) that the Helvetica core font can't encode. All text written to the
+  PDF is now sanitized centrally (cell/multi_cell overrides): known symbols
+  are mapped to ASCII, anything else outside latin-1 is replaced. No more
+  `FPDFUnicodeEncodingException`.
+
+### Added — clearer "what's missing"
+- **Dataset coverage panel** in the verdict block, showing exactly which shot
+  types are present vs missing:
+  - `Angles : face 70 · 3/4 8 · profil 0  ❗ aucun profil`
+  - `Cadrage : gros plan 75 · mi-corps 5 · plein pied 0  ❗ aucun plein pied`
+  - `Expressions : sourire (60), neutre (20)  ❗ peu varié`
+  Each count is colour-coded (green = well covered, yellow = thin, red = absent).
+- **"Photos à générer pour compléter"** section listing the concrete missing
+  shot types right under the coverage panel (in yellow).
+- The coverage + photos-to-generate are also written to `_analysis_report.txt`.
+
+---
+
 ## [v1.0.7] — 2026-05-31
 
 ### Fixed (regression)

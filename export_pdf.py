@@ -23,7 +23,48 @@ COLORS = {
 }
 
 
+# Remplacements de symboles unicode courants -> ASCII (Helvetica = latin-1 only)
+_SYMBOL_MAP = {
+    "→": "->", "←": "<-", "↑": "^", "↓": "v", "⟶": "->", "➜": "->",
+    "•": "-", "·": "-", "—": "-", "–": "-", "…": "...",
+    "✅": "[OK]", "✔": "[OK]", "☑": "[OK]",
+    "⚠️": "[!]", "⚠": "[!]", "❌": "[X]", "✗": "[X]",
+    "💡": "[i]", "📊": "[#]", "🧬": "[LoRA]", "🎯": "[*]", "📷": "[img]",
+    "🌈": "[div]", "📐": "[AR]", "🔁": "[dup]", "🤖": "[AI]", "😶": "", "😊": "",
+    "🏆": "[NOTE]", "🎲": "", "🖼": "[img]", "🎨": "", "🎬": "", "📸": "[photo]",
+    "📂": "", "🗑": "", "🔧": "", "🎭": "", "✨": "", "⭐": "*", "⚡": "",
+    "≥": ">=", "≤": "<=", "°": "deg", "×": "x",
+}
+
+
+def sanitize_pdf_text(text):
+    """Rend un texte sûr pour Helvetica (latin-1) : remplace les symboles connus
+    puis supprime tout caractère hors latin-1."""
+    if not isinstance(text, str):
+        return text
+    for k, v in _SYMBOL_MAP.items():
+        if k in text:
+            text = text.replace(k, v)
+    # Tout ce qui reste hors latin-1 est remplacé par '?'
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
 class AnalysisPDF(FPDF):
+    # Surcharge centralisee : tout texte ecrit est sanitise automatiquement.
+    def cell(self, *args, **kwargs):
+        args = tuple(sanitize_pdf_text(a) for a in args)
+        for key in ("text", "txt"):
+            if key in kwargs:
+                kwargs[key] = sanitize_pdf_text(kwargs[key])
+        return super().cell(*args, **kwargs)
+
+    def multi_cell(self, *args, **kwargs):
+        args = tuple(sanitize_pdf_text(a) for a in args)
+        for key in ("text", "txt"):
+            if key in kwargs:
+                kwargs[key] = sanitize_pdf_text(kwargs[key])
+        return super().multi_cell(*args, **kwargs)
+
     def header(self):
         # Bandeau haut
         self.set_fill_color(*COLORS["card"])
