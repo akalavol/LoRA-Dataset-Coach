@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.12] — 2026-06-01
+
+### Fixed — Kohya config rejected ("extra keys not allowed @ data['model']")
+The generated `kohya_config.toml` used an invalid structure (`[model]` /
+`[folders]` / `[training]`) that Kohya's **Dataset Config** field rejects
+(sd-scripts dataset configs must be `[general]` + `[[datasets]]` + subsets,
+with no `[model]` section). Now the Kohya targets produce:
+- **`dataset_config.toml`** — a valid sd-scripts dataset config (this is the
+  file that goes in Kohya's "Dataset Config" field). It pins resolution,
+  repeats, captions to the `N_persona/` image folder.
+- **`kohya_GUI_SETTINGS.txt`** — the recommended model / LR / network settings
+  to copy into the GUI (plain text, so it can't be mistaken for a loadable
+  config). Also documents the no-toml "folder method".
+
+README/launch instructions updated accordingly.
+
+---
+
 ## [v1.0.11] — 2026-05-31
 
 ### Fixed — cache write failed on numpy values

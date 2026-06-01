@@ -624,10 +624,18 @@ def _write_trainer_config(target, cfg, persona_name, repeats, output_folder, ima
     """Genere le fichier config approprie."""
     fmt = cfg["config_format"]
     if fmt == "kohya_toml":
-        path = output_folder / "kohya_config.toml"
-        path.write_text(_kohya_toml(cfg, persona_name, repeats, output_folder, sd15=("sd15" in target)),
-                        encoding="utf-8")
-        return path
+        # 1) dataset_config.toml = LE fichier a mettre dans le champ "Dataset Config"
+        #    de Kohya (format sd-scripts valide : [general] + [[datasets]] + subsets).
+        ds_path = output_folder / "dataset_config.toml"
+        ds_path.write_text(
+            _kohya_dataset_toml(cfg, persona_name, repeats, images_folder),
+            encoding="utf-8")
+        # 2) reglages GUI conseilles (a recopier a la main dans la GUI, PAS a charger
+        #    dans le champ Dataset Config). Suffixe _GUI_SETTINGS pour eviter la confusion.
+        (output_folder / "kohya_GUI_SETTINGS.txt").write_text(
+            _kohya_gui_settings(cfg, persona_name, output_folder, sd15=("sd15" in target)),
+            encoding="utf-8")
+        return ds_path
     elif fmt == "kohya_toml_flux":
         path = output_folder / "kohya_flux_config.toml"
         path.write_text(_kohya_flux_toml(cfg, persona_name, repeats, output_folder),
@@ -706,43 +714,68 @@ def _write_trainer_config(target, cfg, persona_name, repeats, output_folder, ima
     return None
 
 
-def _kohya_toml(cfg, persona_name, repeats, output_folder, sd15=False):
+def _kohya_dataset_toml(cfg, persona_name, repeats, images_folder):
+    """DATASET config valide pour sd-scripts (champ 'Dataset Config' de Kohya).
+    Format strict : [general] + [[datasets]] + [[datasets.subsets]]. PAS de [model]."""
     res = cfg["resolutions"][0]
-    base = cfg["base_model"]
-    ckpt_dir = "C:/AI/ComfyUI-future/ComfyUI_windows_portable/ComfyUI/models/checkpoints"
-    return f"""# Config Kohya {('SD 1.5' if sd15 else 'SDXL')} - genere {datetime.now().strftime('%Y-%m-%d %H:%M')}
-# Charger via Kohya SS GUI : LoRA > Tools > Load config
-[model]
-v2 = false
-v_parameterization = false
-pretrained_model_name_or_path = "{ckpt_dir}/{base}"
+    img_dir = str(images_folder).replace(chr(92), '/')
+    return f"""# Dataset config Kohya (sd-scripts) - genere {datetime.now().strftime('%Y-%m-%d %H:%M')}
+# >>> A METTRE dans le champ "Dataset Config" de Kohya (PAS dans Load config). <<<
+[general]
+shuffle_caption = false
+caption_extension = ".txt"
+keep_tokens = 1
 
-[folders]
-output_dir = "{str(output_folder / 'output').replace(chr(92), '/')}"
-logging_dir = "{str(output_folder / 'logs').replace(chr(92), '/')}"
-train_data_dir = "{str(output_folder).replace(chr(92), '/')}"
-
-[training]
-output_name = "{persona_name}_lora"
-save_model_as = "safetensors"
-resolution = "{res[0]},{res[1]}"
+[[datasets]]
+resolution = {res[0]}
 batch_size = 1
-max_train_epochs = {cfg['default_epochs']}
-save_every_n_epochs = 1
-network_module = "networks.lora"
-network_dim = {cfg['network_dim']}
-network_alpha = {cfg['network_alpha']}
-learning_rate = {cfg['learning_rate']}
-unet_lr = {cfg['learning_rate']}
-text_encoder_lr = {cfg['learning_rate'] / 2}
-lr_scheduler = "cosine_with_restarts"
-optimizer_type = "AdamW8bit"
-mixed_precision = "bf16"
-save_precision = "bf16"
-seed = 42
-cache_latents = true
-gradient_checkpointing = true
-xformers = true
+
+  [[datasets.subsets]]
+  image_dir = "{img_dir}"
+  num_repeats = {repeats}
+"""
+
+
+def _kohya_gui_settings(cfg, persona_name, output_folder, sd15=False):
+    """Reglages a RECOPIER a la main dans la GUI Kohya (onglets Model / Parameters).
+    Volontairement en .txt pour ne PAS etre confondu avec un fichier a charger."""
+    base = cfg["base_model"]
+    res = cfg["resolutions"][0]
+    return f"""REGLAGES KOHYA CONSEILLES — {('SD 1.5' if sd15 else 'SDXL')} — persona "{persona_name}"
+(A recopier dans la GUI Kohya. Ne PAS charger ce fichier dans un champ toml.)
+
+== Onglet "Accelerate launch" / Model ==
+  Pretrained model name or path : {base}
+     (ou le chemin complet vers ton checkpoint, ex:
+      C:/AI/ComfyUI-future/ComfyUI_windows_portable/ComfyUI/models/checkpoints/{base})
+  {'(coche "SDXL Model")' if not sd15 else '(SD 1.5 : ne coche PAS SDXL/v2)'}
+
+== Onglet "Folders" ==
+  Dataset Config : {str(output_folder / 'dataset_config.toml').replace(chr(92), '/')}
+     (c'est LE fichier a mettre ici)
+  Output folder  : {str(output_folder / 'output').replace(chr(92), '/')}
+  Output name    : {persona_name}_lora
+
+== Onglet "Parameters" ==
+  LoRA type            : Standard
+  Train batch size     : 1
+  Epoch                : {cfg['default_epochs']}
+  Save every N epochs  : 1
+  Mixed precision      : bf16 (ou fp16)
+  Network Rank (dim)   : {cfg['network_dim']}
+  Network Alpha        : {cfg['network_alpha']}
+  Learning rate        : {cfg['learning_rate']}
+  LR scheduler         : cosine_with_restarts
+  Optimizer            : AdamW8bit
+  Resolution           : {res[0]},{res[1]}
+  Cache latents        : ON
+  Gradient checkpointing : ON
+  xformers             : ON
+
+== ALTERNATIVE SANS dataset_config (methode dossier) ==
+  Laisse "Dataset Config" VIDE et mets dans "Image folder" :
+     {str(output_folder).replace(chr(92), '/')}
+  (le parent de {cfg['default_repeats'] or 10}_{persona_name}/) — Kohya deduit les repeats du nom du dossier.
 """
 
 
@@ -1283,9 +1316,20 @@ lr = {cfg['learning_rate']}
 
 def _launch_instructions(target, cfg, persona_name, output_folder):
     fmt = cfg["config_format"]
-    if fmt == "kohya_toml" or fmt == "kohya_toml_flux":
+    if fmt == "kohya_toml":
+        return (
+            "1. Lance Kohya SS GUI (LoRA)\n"
+            "2. Onglet Folders > champ 'Dataset Config' : mets dataset_config.toml\n"
+            "   (ce dossier). NE PAS le charger via 'Load config' !\n"
+            "3. Renseigne le modele de base + Output folder (voir kohya_GUI_SETTINGS.txt\n"
+            "   pour tous les reglages conseilles a recopier).\n"
+            "4. Train model.\n"
+            "   --- OU methode dossier (sans toml) : champ 'Image folder' = ce dossier\n"
+            "   (le parent du sous-dossier N_persona), 'Dataset Config' vide.\n"
+            f"5. Sortie : output/{persona_name}_lora.safetensors")
+    if fmt == "kohya_toml_flux":
         return (f"1. Lance Kohya SS GUI\n"
-                f"2. Onglet LoRA > Tools > Load config > {fmt == 'kohya_toml_flux' and 'kohya_flux_config.toml' or 'kohya_config.toml'}\n"
+                f"2. Onglet LoRA > Tools > Load config > kohya_flux_config.toml\n"
                 f"3. Verifie le chemin du modele de base\n"
                 f"4. Train model\n"
                 f"5. Sortie : output/{persona_name}_lora.safetensors")
