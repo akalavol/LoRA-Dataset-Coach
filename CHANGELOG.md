@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.11] — 2026-05-31
+
+### Fixed — cache write failed on numpy values
+`Echec ecriture cache : Object of type float32 is not JSON serializable`.
+Some analysis fields are numpy `float32`/`int64`, which plain `json.dumps`
+can't write — so the cache was **never saved**, and every run re-analyzed
+everything (no duplicate-skipping). `save_cache` and the live `IMGINFO`
+messages now use a numpy-aware serializer (`float32→float`, `int64→int`,
+`ndarray→list`). The cache now persists and is read back at the start of the
+next run, so unchanged photos are skipped.
+
+To answer the question "shouldn't it read the JSONs first to avoid doing
+duplicates?" — it already does (`load_cache` at the start of every analysis);
+the write was just silently failing, so there was never a cache to read.
+
+---
+
 ## [v1.0.10] — 2026-05-31
 
 ### Fixed (critical) — the in-app updater did nothing

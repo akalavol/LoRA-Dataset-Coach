@@ -291,12 +291,31 @@ def load_cache(folder):
         return {}
 
 
+def _json_default(o):
+    """Convertit les types numpy (float32, int64, ndarray...) en types Python
+    natifs pour que json.dumps ne plante pas."""
+    try:
+        import numpy as np
+        if isinstance(o, np.integer):
+            return int(o)
+        if isinstance(o, np.floating):
+            return float(o)
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, (np.bool_,)):
+            return bool(o)
+    except Exception:
+        pass
+    return str(o)  # dernier recours : ne jamais faire planter le cache
+
+
 def save_cache(folder, cache_dict):
-    """Sauve le cache."""
+    """Sauve le cache. default=_json_default gere les float32/int64 numpy."""
     cache_path = Path(folder) / CACHE_FILE
     try:
-        cache_path.write_text(json.dumps(cache_dict, ensure_ascii=False, indent=1),
-                              encoding="utf-8")
+        cache_path.write_text(
+            json.dumps(cache_dict, ensure_ascii=False, indent=1, default=_json_default),
+            encoding="utf-8")
     except Exception as e:
         print(f"STEP Echec ecriture cache : {e}", file=sys.stderr, flush=True)
 
@@ -592,7 +611,7 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                 "cached": True,
             }
             try:
-                print(f"IMGINFO {json.dumps(mini, ensure_ascii=False)}", file=sys.stderr, flush=True)
+                print(f"IMGINFO {json.dumps(mini, ensure_ascii=False, default=_json_default)}", file=sys.stderr, flush=True)
             except Exception:
                 pass
             continue
@@ -867,7 +886,7 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                 "ai_metadata_sources": entry.get("ai_metadata_sources"),
             }
             try:
-                print(f"IMGINFO {json.dumps(mini, ensure_ascii=False)}",
+                print(f"IMGINFO {json.dumps(mini, ensure_ascii=False, default=_json_default)}",
                       file=sys.stderr, flush=True)
             except Exception:
                 pass
@@ -1179,7 +1198,7 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                     "artifacts_categories": r.get("artifacts_categories"),
                 }
                 try:
-                    print(f"IMGINFO {json.dumps(mini2, ensure_ascii=False)}",
+                    print(f"IMGINFO {json.dumps(mini2, ensure_ascii=False, default=_json_default)}",
                           file=sys.stderr, flush=True)
                 except Exception:
                     pass
