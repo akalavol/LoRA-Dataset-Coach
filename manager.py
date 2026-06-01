@@ -825,15 +825,17 @@ class App:
         # ===== Photo de reference (optionnelle) =====
         ref_frame = Frame(frame, bg=CARD, padx=10, pady=8)
         ref_frame.pack(fill="x", pady=4)
-        Label(ref_frame, text="📷 Photo de référence :",
+        Label(ref_frame, text="📷 Référence(s) :",
               font=FONT_BODY, fg=TEXT, bg=CARD).pack(side="left")
         self.analyzer_ref_path = StringVar(value="")
         ref_entry = tk.Entry(ref_frame, textvariable=self.analyzer_ref_path, font=FONT_MONO,
                              bg=BG2, fg=TEXT, insertbackground=TEXT, relief="flat")
         ref_entry.pack(side="left", fill="x", expand=True, ipady=5, padx=8)
-        make_button(ref_frame, "📂", self._pick_ref_image).pack(side="left", padx=4)
-        make_button(ref_frame, "✕", lambda: self.analyzer_ref_path.set("")).pack(side="left", padx=2)
-        Label(ref_frame, text="(optionnel — vérifie que c'est la bonne personne)",
+        make_button(ref_frame, "📄", self._pick_ref_image).pack(side="left", padx=2)   # 1 fichier
+        make_button(ref_frame, "📁", self._pick_ref_folder).pack(side="left", padx=2)  # dossier de réfs
+        make_button(ref_frame, "✕", lambda: (self.analyzer_ref_path.set(""),
+                                              self._update_preview_ref(""))).pack(side="left", padx=2)
+        Label(ref_frame, text="(optionnel — 1 photo OU 📁 un dossier de 2-5 photos = identité robuste)",
               font=FONT_SMALL, fg=TEXT_DIM, bg=CARD).pack(side="left", padx=8)
 
         # ===== Mode captioner =====
@@ -1017,11 +1019,12 @@ class App:
                                             "L'analyseur a besoin d'insightface (installe dans ComfyUI-future).")
             return
 
-        # Photo de reference (optionnelle)
+        # Référence(s) optionnelle(s) : 1 fichier OU un dossier de photos
         ref = self.analyzer_ref_path.get().strip()
-        if ref and not Path(ref).is_file():
-            messagebox.showerror("Erreur", f"Photo de reference introuvable :\n{ref}\n\n"
-                                            "Laisse vide pour analyser sans reference.")
+        if ref and not (Path(ref).is_file() or Path(ref).is_dir()):
+            messagebox.showerror("Erreur", f"Référence introuvable :\n{ref}\n\n"
+                                            "Donne une photo OU un dossier de photos, "
+                                            "ou laisse vide.")
             return
         # Affiche la ref dans le preview (au cas ou elle a ete tapee manuellement)
         self._update_preview_ref(ref)
@@ -2387,13 +2390,29 @@ class App:
             self.preview_ref_name.config(text="(aucune)")
             self._preview_ref_photo = None
             return
-        photo = self._load_preview_image(path, max_size=200)
+        # Si c'est un DOSSIER : montre la 1re image + le nombre de réfs
+        p = Path(path)
+        label_txt = p.name
+        thumb_path = path
+        if p.is_dir():
+            exts = (".png", ".jpg", ".jpeg", ".webp")
+            imgs = sorted([f for f in p.iterdir()
+                           if f.is_file() and f.suffix.lower() in exts])
+            if imgs:
+                thumb_path = str(imgs[0])
+                label_txt = f"📁 {p.name} ({len(imgs)} réfs)"
+            else:
+                self.preview_ref_name.config(text=f"📁 {p.name} (vide ⚠️)")
+                self.preview_ref_label.config(image="", width=200, height=200)
+                self._preview_ref_photo = None
+                return
+        photo = self._load_preview_image(thumb_path, max_size=200)
         if photo is None:
-            self.preview_ref_name.config(text=f"⚠️ {Path(path).name}")
+            self.preview_ref_name.config(text=f"⚠️ {label_txt}")
             return
         self._preview_ref_photo = photo
         self.preview_ref_label.config(image=photo, width=200, height=200)
-        self.preview_ref_name.config(text=Path(path).name)
+        self.preview_ref_name.config(text=label_txt)
 
     def _tree_item_to_path(self, item_id):
         """Retrouve le path d'une ligne du tableau via son nom + dataset folder."""
@@ -2692,12 +2711,24 @@ class App:
         initdir = str(Path(cur).parent) if cur and Path(cur).exists() else self.analyzer_path.get()
         f = filedialog.askopenfilename(
             initialdir=initdir,
-            title="Choisir une photo de reference (un visage clair)",
+            title="Choisir UNE photo de reference (un visage clair)",
             filetypes=[("Images", "*.png *.jpg *.jpeg *.webp"), ("Tous", "*.*")]
         )
         if f:
             self.analyzer_ref_path.set(f.replace("/", "\\"))
             self._update_preview_ref(f)
+
+    def _pick_ref_folder(self):
+        """Choisir un DOSSIER de références (plusieurs photos -> identité robuste)."""
+        cur = self.analyzer_ref_path.get().strip()
+        initdir = cur if cur and Path(cur).is_dir() else self.analyzer_path.get()
+        d = filedialog.askdirectory(
+            initialdir=initdir,
+            title="Choisir un dossier de références (2-5 photos de la personne : visage, 3/4, plein pied…)"
+        )
+        if d:
+            self.analyzer_ref_path.set(d.replace("/", "\\"))
+            self._update_preview_ref(d)
 
     def _save_cfg(self):
         for k, v in self.entries.items():

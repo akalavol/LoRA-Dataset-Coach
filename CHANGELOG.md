@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.13] — 2026-06-01
+
+### Added — multiple reference photos (robust identity)
+The reference can now be a **single photo OR a folder of photos** (face,
+3/4, full-body…). When a folder is given, the analyzer builds an **identity
+centroid** (mean of the detected face embeddings, re-normalized) instead of
+relying on one possibly-bad shot. This makes the "right person / wrong person"
+check much more robust and cuts false "wrong person" flags.
+- New 📁 button in the analyzer to pick a reference folder (the 📄 button still
+  picks a single photo).
+- Preview shows the first ref image + the count (`📁 refs (4 réfs)`).
+- Photos in the ref folder with no detectable face are skipped (and reported).
+- The verdict shows e.g. `📷 Réf : 4 photos → ✅ 28 correspondent (avg 0.79)`.
+
+Note: face identity uses InsightFace (very reliable). A full-body ref helps
+mainly the face centroid; true body-shape matching isn't possible with the
+current models, so body similarity stays "indicative" via CLIP.
+
+---
+
 ## [v1.0.12] — 2026-06-01
 
 ### Fixed — Kohya config rejected ("extra keys not allowed @ data['model']")

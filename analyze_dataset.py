@@ -405,36 +405,66 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
         import traceback
         return {"error": f"Init insightface ({insight_root}) : {e}\n\n{traceback.format_exc()[-500:]}"}
 
-    # ===== Photo de reference (optionnelle) =====
-    ref_embedding = None
+    # ===== Reference(s) (optionnel) : 1 fichier OU un dossier de photos =====
+    # Plusieurs references -> on calcule un CENTROIDE d'identite (moyenne des
+    # embeddings visage), bien plus robuste qu'une seule photo.
+    ref_embedding = None       # centroide normalise (identite de reference)
     ref_info = None
+    ref_exts = (".png", ".jpg", ".jpeg", ".webp")
     if ref_image:
-        ref_path = Path(ref_image)
-        if not ref_path.is_file():
-            print(f"STEP Reference introuvable : {ref_path}", file=sys.stderr, flush=True)
+        rp = Path(ref_image)
+        # Construit la liste des fichiers de reference
+        ref_files = []
+        if rp.is_dir():
+            ref_files = sorted([f for f in rp.iterdir()
+                                if f.is_file() and f.suffix.lower() in ref_exts])
+        elif rp.is_file():
+            ref_files = [rp]
+
+        if not ref_files:
+            ref_info = {"error": f"Reference introuvable ou vide : {rp}"}
+            print(f"STEP {ref_info['error']}", file=sys.stderr, flush=True)
         else:
-            try:
-                print(f"STEP Analyse photo de reference : {ref_path.name}", file=sys.stderr, flush=True)
-                ref_pil = Image.open(ref_path).convert("RGB")
-                ref_bgr = np.array(ref_pil)[:, :, ::-1]
-                ref_faces = app.get(ref_bgr)
-                if not ref_faces:
-                    ref_info = {"error": f"Aucun visage detecte dans la reference ({ref_path.name})"}
-                    print(f"STEP {ref_info['error']}", file=sys.stderr, flush=True)
-                else:
-                    # Plus gros visage = visage principal
-                    ref_main = max(ref_faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
-                    ref_embedding = ref_main.normed_embedding
-                    ref_info = {
-                        "name": ref_path.name,
-                        "path": str(ref_path),
-                        "face_count_in_ref": len(ref_faces),
-                    }
-                    if len(ref_faces) > 1:
-                        print(f"STEP Reference : {len(ref_faces)} visages detectes, on garde le plus gros", file=sys.stderr, flush=True)
-            except Exception as e:
-                ref_info = {"error": f"Erreur reference : {e}"}
+            print(f"STEP Analyse de {len(ref_files)} référence(s) d'identité...",
+                  file=sys.stderr, flush=True)
+            ref_embs = []
+            ref_names_ok = []
+            ref_no_face = []
+            for rf in ref_files:
+                try:
+                    rpil = Image.open(rf).convert("RGB")
+                    rbgr = np.array(rpil)[:, :, ::-1]
+                    rfaces = app.get(rbgr)
+                    if not rfaces:
+                        ref_no_face.append(rf.name)
+                        continue
+                    rmain = max(rfaces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
+                    ref_embs.append(rmain.normed_embedding)
+                    ref_names_ok.append(rf.name)
+                except Exception as e:
+                    print(f"STEP Réf {rf.name} : erreur ({e})", file=sys.stderr, flush=True)
+
+            if not ref_embs:
+                ref_info = {"error": f"Aucun visage détecté dans la/les référence(s) "
+                                     f"({', '.join(f.name for f in ref_files[:3])}…)"}
                 print(f"STEP {ref_info['error']}", file=sys.stderr, flush=True)
+            else:
+                # Centroide = moyenne des embeddings, re-normalisee
+                centroid = np.mean(np.array(ref_embs), axis=0)
+                norm = np.linalg.norm(centroid)
+                ref_embedding = centroid / norm if norm > 0 else centroid
+                ref_info = {
+                    "name": (ref_names_ok[0] if len(ref_names_ok) == 1
+                             else f"{len(ref_names_ok)} photos"),
+                    "path": str(rp),
+                    "ref_count_used": len(ref_embs),
+                    "ref_names": ref_names_ok[:10],
+                    "ref_no_face": ref_no_face,
+                }
+                msg = f"STEP Référence : centroïde sur {len(ref_embs)} visage(s)"
+                if ref_no_face:
+                    msg += f" ({len(ref_no_face)} sans visage ignorée(s))"
+                print(msg, file=sys.stderr, flush=True)
 
     # Init CLIP pour analyse corps + expressions (optionnel)
     clip_model = None
