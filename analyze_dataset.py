@@ -543,6 +543,12 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
     cache_new = {"version": CACHE_VERSION, "entries": {}}
     n_from_cache = 0
     n_new = 0
+    if cache_entries_old:
+        print(f"STEP Cache trouvé : {len(cache_entries_old)} photo(s) déjà analysée(s) "
+              f"(les inchangées seront réutilisées)", file=sys.stderr, flush=True)
+    else:
+        print("STEP Aucun cache (1er scan de ce dossier) — tout sera analysé",
+              file=sys.stderr, flush=True)
 
     # Annonce le total au debut sur stderr (pour la barre de progression GUI)
     print(f"TOTAL {total}", file=sys.stderr, flush=True)
@@ -887,6 +893,15 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                 phashes.append(None)
             results.append(entry)
 
+        # ===== Sauvegarde INCREMENTALE du cache (tous les 10 images) =====
+        # Ainsi, meme si l'analyse est interrompue (fermeture, crash, timeout),
+        # les photos deja analysees sont memorisees et ne seront pas refaites.
+        if (idx + 1) % 10 == 0:
+            save_cache(folder, cache_new)
+
+    # Flush du cache apres la boucle (capture les dernieres images < palier de 10)
+    save_cache(folder, cache_new)
+
     print("PROGRESS_DONE", file=sys.stderr, flush=True)
     if n_from_cache > 0:
         print(f"STEP Cache : {n_from_cache} reutilisees, {n_new} nouvellement analysees",
@@ -1169,6 +1184,19 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
                 except Exception:
                     pass
 
+                # Sauvegarde incrementale : memorise la caption dans le cache
+                # pour ne pas la regenerer si l'analyse est interrompue ensuite.
+                try:
+                    p_img = Path(r["path"])
+                    fk2 = _file_key(p_img)
+                    if fk2 in cache_new["entries"]:
+                        cache_new["entries"][fk2]["entry"] = dict(r)
+                    if (j + 1) % 10 == 0:
+                        save_cache(folder, cache_new)
+                except Exception:
+                    pass
+
+            save_cache(folder, cache_new)
             print("PROGRESS_DONE", file=sys.stderr, flush=True)
             print("STEP Captions naturelles terminées.", file=sys.stderr, flush=True)
 

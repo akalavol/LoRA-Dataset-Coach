@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.0.9] — 2026-05-31
+
+### Fixed / Improved — analysis cache
+- **The cache now actually persists.** Root cause of "it re-scans everything":
+  on versions ≤ 1.0.5 the analysis crashed at the very end (the `summary_verdict`
+  bug, fixed in 1.0.6) *before* the cache was written, so `.analyzer_cache.json`
+  was never created. Now that analysis completes, the cache is saved.
+- **Incremental cache saving.** The cache is now flushed every 10 images during
+  the analysis (and during phase-2 captioning), not only at the end. If a run
+  is interrupted (app closed, crash, power loss), already-analyzed photos are
+  remembered and won't be redone on the next scan.
+- **Explicit cache log.** The start of each analysis now reports
+  `Cache trouvé : N photo(s) déjà analysée(s)` or `Aucun cache (1er scan)`, so
+  you can see the cache working.
+
+The cache logic itself (key = name|size|mtime) was verified correct: an
+unchanged file is reused, a modified/replaced file is re-analyzed.
+
+---
+
 ## [v1.0.8] — 2026-05-31
 
 ### Fixed
