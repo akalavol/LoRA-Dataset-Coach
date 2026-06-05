@@ -24,6 +24,11 @@ bitsandbytes>=0.42      # INT4 quantization for JoyCaption
 sentencepiece>=0.1.99   # tokenizers
 einops>=0.7             # used by some captioners
 
+# === Audio dataset analysis (Voice RVC + Music LoRA tabs) ===
+librosa>=0.10           # audio loading, F0, BPM/key analysis
+soundfile>=0.12         # fast audio I/O
+mutagen>=1.47           # audio metadata fallback
+
 # === Heavy model checkpoints (auto-downloaded at first use) ===
 # - WD14-MOAT  : ~330 MB (ONNX)
 # - Florence-2-base : ~540 MB

@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.1.0] — 2026-06-05
+
+### Added — Audio dataset analysis (Voice & Music)
+Two new tabs extend the Coach beyond images, to audio LoRA / voice training:
+
+- **🎤 Voice RVC tab** — analyze a folder of voice recordings for RVC training
+  (Applio). Per-file metrics: duration, **SNR** (signal-to-noise), RMS level,
+  sample rate, fundamental frequency (F0). A→F grade per file + global summary
+  (total duration, sample-rate consistency, top issues) and a "ready for RVC"
+  verdict with recommendations. One-click launch of Applio.
+
+- **🎵 Music LoRA tab** — prepare a music collection for **ACE-Step 1.5** LoRA
+  training. Checks conformance to the ACE-Step format (`song.mp3` +
+  `song.lyrics.txt` + `song.json` with bpm/keyscale/caption/timesignature/
+  language), flags missing lyrics/annotations, reports BPM & key diversity, and
+  can **auto-generate the missing `.json` templates**. One-click launch of the
+  ACE-Step UI.
+
+New modules: `analyze_voice.py`, `analyze_music.py`.
+New deps: `librosa`, `soundfile`, `mutagen` (audio analysis only).
+
+---
+
 ## [v1.0.13] — 2026-06-01
 
 ### Added — multiple reference photos (robust identity)

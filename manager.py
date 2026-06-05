@@ -181,11 +181,13 @@ class App:
 
         self._build_analyzer_tab(notebook)
         self._build_evaluator_tab(notebook)
+        self._build_voice_tab(notebook)
+        self._build_music_tab(notebook)
         self._build_config_tab(notebook)
 
     def select_tab(self, name):
         """Selectionne un tab par nom court."""
-        mapping = {"analyzer": 0, "evaluator": 1, "config": 2}
+        mapping = {"analyzer": 0, "evaluator": 1, "voice": 2, "music": 3, "config": 4}
         if name in mapping:
             self.notebook.select(mapping[name])
 
@@ -484,6 +486,305 @@ class App:
                                     values=(face, rsim_str, rsim_max_str,
                                               near_ref_str, near_tr_str, copycat),
                                     tags=(tag,))
+
+    # =========================================================
+    # ONGLET VOIX — Dataset RVC (Applio)
+    # =========================================================
+    def _build_voice_tab(self, parent):
+        frame = Frame(parent, bg=BG, padx=20, pady=15)
+        parent.add(frame, text="  🎤 Voix RVC  ")
+
+        Label(frame, text="🎤  Dataset Voix — Entraînement RVC (Applio)",
+              font=FONT_TITLE, fg=TEXT, bg=BG).pack(anchor="w", pady=(0, 4))
+        Label(frame,
+              text="Analyse tes fichiers audio pour l'entraînement RVC : qualité micro, SNR, durée, diversité.",
+              font=FONT_BODY, fg=TEXT_DIM, bg=BG).pack(anchor="w", pady=(0, 10))
+
+        # Sélection dossier
+        sel = Frame(frame, bg=BG)
+        sel.pack(fill="x", pady=4)
+        Label(sel, text="Dossier audio :", font=FONT_BODY, fg=TEXT_DIM, bg=BG).pack(side="left")
+        self.voice_folder = StringVar()
+        Entry(sel, textvariable=self.voice_folder, font=FONT_MONO, bg=BG2, fg=TEXT,
+              relief="flat", width=55).pack(side="left", padx=8)
+        make_button(sel, "📂", lambda: self._pick_folder(self.voice_folder), width=4).pack(side="left")
+        make_button(sel, "🔍 Analyser", self._run_voice_analysis, primary=True, width=12).pack(side="left", padx=8)
+
+        # Barre de progression
+        self.voice_progress_var = StringVar(value="")
+        Label(frame, textvariable=self.voice_progress_var, font=FONT_SMALL, fg=TEXT_DIM, bg=BG,
+              anchor="w").pack(fill="x", pady=(4, 0))
+
+        # Résultats — tableau + résumé
+        pane = Frame(frame, bg=BG)
+        pane.pack(fill="both", expand=True, pady=8)
+
+        # Colonne gauche : liste fichiers
+        left = Frame(pane, bg=BG)
+        left.pack(side="left", fill="both", expand=True)
+        Label(left, text="Fichiers analysés", font=FONT_H1, fg=ACCENT, bg=BG).pack(anchor="w")
+        cols = ("fichier", "durée", "SNR", "RMS", "SR", "note", "problèmes")
+        self.voice_tree = ttk.Treeview(left, columns=cols, show="headings",
+                                        style="Dark.Treeview", height=14)
+        for c, w in zip(cols, (200, 65, 65, 65, 75, 50, 280)):
+            self.voice_tree.heading(c, text=c); self.voice_tree.column(c, width=w, anchor="center")
+        self.voice_tree.column("fichier", anchor="w"); self.voice_tree.column("problèmes", anchor="w")
+        self.voice_tree.pack(fill="both", expand=True)
+
+        # Colonne droite : résumé + recommandations
+        right = Frame(pane, bg=CARD, padx=12, pady=10, width=280)
+        right.pack(side="right", fill="y", padx=(12, 0))
+        right.pack_propagate(False)
+        Label(right, text="Résumé", font=FONT_H1, fg=ACCENT, bg=CARD).pack(anchor="w")
+        self.voice_summary_text = Text(right, bg=CARD, fg=TEXT, font=FONT_SMALL,
+                                        relief="flat", wrap="word", state="disabled", height=18)
+        self.voice_summary_text.pack(fill="both", expand=True)
+
+        # Actions
+        act = Frame(frame, bg=BG)
+        act.pack(fill="x", pady=(6, 0))
+        make_button(act, "🚀 Ouvrir Applio", self._open_applio, width=16).pack(side="left", padx=4)
+        Label(act, text="→ Entraîne ton modèle vocal RVC dans Applio",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=BG).pack(side="left")
+
+    def _pick_folder(self, var):
+        from tkinter import filedialog
+        f = filedialog.askdirectory(title="Choisir un dossier")
+        if f:
+            var.set(f.replace("/", "\\"))
+
+    def _run_voice_analysis(self):
+        folder = self.voice_folder.get().strip()
+        if not folder or not os.path.isdir(folder):
+            messagebox.showwarning("Dossier", "Choisis un dossier audio valide.")
+            return
+        self.voice_tree.delete(*self.voice_tree.get_children())
+        self._set_voice_summary("⏳ Analyse en cours…")
+        self.voice_progress_var.set("Démarrage…")
+
+        def run():
+            try:
+                from analyze_voice import analyze_voice_folder
+                GRADE_COLOR = {"A": GREEN, "B": ACCENT, "C": ORANGE, "D": RED, "F": "#ff0000"}
+
+                def on_progress(i, total, name):
+                    self.root.after(0, lambda: self.voice_progress_var.set(
+                        f"[{i+1}/{total}] {name}"))
+
+                def on_result(r):
+                    tag = r["score"]
+                    dur = f"{r['duration_s']:.1f}s" if r["duration_s"] else "?"
+                    snr = f"{r['snr_db']} dB" if r["snr_db"] else "?"
+                    rms = f"{r['rms_db']} dB" if r["rms_db"] else "?"
+                    sr = f"{r['sample_rate']} Hz" if r["sample_rate"] else "?"
+                    issues = " | ".join(r["issues"]) if r["issues"] else "✅ OK"
+                    self.root.after(0, lambda: self.voice_tree.insert(
+                        "", "end", values=(r["file"], dur, snr, rms, sr, tag, issues),
+                        tags=(tag,)))
+                    self.root.after(0, lambda: self.voice_tree.tag_configure(
+                        tag, foreground=GRADE_COLOR.get(tag, TEXT)))
+
+                summary = analyze_voice_folder(folder, on_progress, on_result)
+                self.root.after(0, lambda: self._show_voice_summary(summary))
+                self.root.after(0, lambda: self.voice_progress_var.set(
+                    f"✅ {summary['total']} fichiers analysés"))
+            except ImportError as e:
+                self.root.after(0, lambda: self._set_voice_summary(
+                    f"❌ Module manquant : {e}\n\nInstalle : pip install librosa soundfile"))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _show_voice_summary(self, s):
+        gc = s.get("grade_counts", {})
+        txt = (
+            f"📁 Fichiers : {s['total']}\n"
+            f"⏱ Durée totale : {s['total_duration_min']} min\n"
+            f"⌛ Durée moy. : {s['avg_duration_s']} s\n\n"
+            f"Notes :\n"
+            + "".join(f"  {g} : {gc.get(g,0)}\n" for g in "ABCDF")
+            + f"\n🎯 Score global : {s['overall_score']}\n"
+            + ("✅ Prêt pour Applio\n" if s.get('rvc_ready') else "⚠️ Corrige les problèmes d'abord\n")
+            + f"\n📋 Taux d'éch. : {', '.join(str(x) for x in s.get('sample_rates', []))}\n\n"
+            + "⚠️ Problèmes fréquents :\n"
+            + "\n".join(f"  • {i['issue']} ({i['count']}×)" for i in s.get('top_issues', []))
+            + f"\n\n💡 Recommandation :\n{s.get('recommendation', '')}"
+        )
+        self._set_voice_summary(txt)
+
+    def _set_voice_summary(self, txt):
+        self.voice_summary_text.config(state="normal")
+        self.voice_summary_text.delete("1.0", "end")
+        self.voice_summary_text.insert("1.0", txt)
+        self.voice_summary_text.config(state="disabled")
+
+    def _open_applio(self):
+        bat = r"C:\AI\Applio\run-applio.bat"
+        if os.path.exists(bat):
+            subprocess.Popen(["cmd", "/c", "start", "", bat], shell=False)
+        else:
+            messagebox.showinfo("Applio", f"Applio introuvable :\n{bat}")
+
+    # =========================================================
+    # ONGLET MUSIQUE — Dataset ACE-Step 1.5 LoRA
+    # =========================================================
+    def _build_music_tab(self, parent):
+        frame = Frame(parent, bg=BG, padx=20, pady=15)
+        parent.add(frame, text="  🎵 Musique LoRA  ")
+
+        Label(frame, text="🎵  Dataset Musical — LoRA ACE-Step 1.5",
+              font=FONT_TITLE, fg=TEXT, bg=BG).pack(anchor="w", pady=(0, 4))
+        Label(frame,
+              text="Prépare tes morceaux pour l'entraînement d'un LoRA musical ACE-Step 1.5 (style, artiste…)",
+              font=FONT_BODY, fg=TEXT_DIM, bg=BG).pack(anchor="w", pady=(0, 10))
+
+        # Sélection dossier
+        sel = Frame(frame, bg=BG)
+        sel.pack(fill="x", pady=4)
+        Label(sel, text="Dossier morceaux :", font=FONT_BODY, fg=TEXT_DIM, bg=BG).pack(side="left")
+        self.music_folder = StringVar()
+        Entry(sel, textvariable=self.music_folder, font=FONT_MONO, bg=BG2, fg=TEXT,
+              relief="flat", width=50).pack(side="left", padx=8)
+        make_button(sel, "📂", lambda: self._pick_folder(self.music_folder), width=4).pack(side="left")
+        make_button(sel, "🔍 Analyser", self._run_music_analysis, primary=True, width=12).pack(side="left", padx=8)
+        make_button(sel, "📝 Générer JSON", self._generate_music_json, width=14).pack(side="left", padx=4)
+
+        # Info format
+        info = Frame(frame, bg=BG2, padx=10, pady=6)
+        info.pack(fill="x", pady=(0, 6))
+        Label(info, text="📋 Format ACE-Step attendu : song.mp3 + song.lyrics.txt + song.json {bpm, keyscale, caption, timesignature, language}",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=BG2, anchor="w").pack(fill="x")
+
+        # Barre de progression
+        self.music_progress_var = StringVar(value="")
+        Label(frame, textvariable=self.music_progress_var, font=FONT_SMALL, fg=TEXT_DIM, bg=BG,
+              anchor="w").pack(fill="x", pady=(2, 0))
+
+        # Tableau
+        pane = Frame(frame, bg=BG)
+        pane.pack(fill="both", expand=True, pady=6)
+
+        left = Frame(pane, bg=BG)
+        left.pack(side="left", fill="both", expand=True)
+        Label(left, text="Morceaux analysés", font=FONT_H1, fg=ACCENT, bg=BG).pack(anchor="w")
+        cols = ("fichier", "durée", "paroles", "json", "BPM", "clé", "note", "problèmes")
+        self.music_tree = ttk.Treeview(left, columns=cols, show="headings",
+                                        style="Dark.Treeview", height=14)
+        for c, w in zip(cols, (180, 65, 60, 50, 60, 90, 50, 240)):
+            self.music_tree.heading(c, text=c); self.music_tree.column(c, width=w, anchor="center")
+        self.music_tree.column("fichier", anchor="w"); self.music_tree.column("problèmes", anchor="w")
+        self.music_tree.pack(fill="both", expand=True)
+
+        right = Frame(pane, bg=CARD, padx=12, pady=10, width=280)
+        right.pack(side="right", fill="y", padx=(12, 0))
+        right.pack_propagate(False)
+        Label(right, text="Résumé", font=FONT_H1, fg=ACCENT, bg=CARD).pack(anchor="w")
+        self.music_summary_text = Text(right, bg=CARD, fg=TEXT, font=FONT_SMALL,
+                                        relief="flat", wrap="word", state="disabled", height=18)
+        self.music_summary_text.pack(fill="both", expand=True)
+
+        # Actions
+        act = Frame(frame, bg=BG)
+        act.pack(fill="x", pady=(4, 0))
+        make_button(act, "🚀 Ouvrir ACE-Step", self._open_ace_step, width=18).pack(side="left", padx=4)
+        Label(act, text="→ Lance ACE-Step 1.5 UI → onglet LoRA Training",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=BG).pack(side="left")
+
+    def _run_music_analysis(self):
+        folder = self.music_folder.get().strip()
+        if not folder or not os.path.isdir(folder):
+            messagebox.showwarning("Dossier", "Choisis un dossier audio valide.")
+            return
+        self.music_tree.delete(*self.music_tree.get_children())
+        self._set_music_summary("⏳ Analyse en cours…")
+        self.music_progress_var.set("Démarrage…")
+
+        def run():
+            try:
+                from analyze_music import analyze_music_folder
+                GRADE_COLOR = {"A": GREEN, "B": ACCENT, "C": ORANGE, "D": RED, "F": "#ff0000"}
+
+                def on_progress(i, total, name):
+                    self.root.after(0, lambda: self.music_progress_var.set(
+                        f"[{i+1}/{total}] {name}"))
+
+                def on_result(r):
+                    tag = r["score"]
+                    dur = f"{r['duration_s']:.0f}s" if r["duration_s"] else "?"
+                    bpm = str(r["meta"].get("bpm", "?")) if r["meta"].get("bpm") else "?"
+                    key = r["meta"].get("keyscale", "?") or "?"
+                    lyrics = "✅" if r["has_lyrics"] else "❌"
+                    jsn = "✅" if r["has_json"] else "❌"
+                    issues = " | ".join(r["issues"]) if r["issues"] else "✅ OK"
+                    self.root.after(0, lambda: self.music_tree.insert(
+                        "", "end", values=(r["file"], dur, lyrics, jsn, bpm, key, tag, issues),
+                        tags=(tag,)))
+                    self.root.after(0, lambda: self.music_tree.tag_configure(
+                        tag, foreground=GRADE_COLOR.get(tag, TEXT)))
+
+                summary = analyze_music_folder(folder, on_progress, on_result)
+                self.root.after(0, lambda: self._show_music_summary(summary))
+                self.root.after(0, lambda: self.music_progress_var.set(
+                    f"✅ {summary['total']} morceaux analysés"))
+            except ImportError as e:
+                self.root.after(0, lambda: self._set_music_summary(
+                    f"❌ Module manquant : {e}\n\nInstalle : pip install librosa soundfile mutagen"))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _generate_music_json(self):
+        folder = self.music_folder.get().strip()
+        if not folder or not os.path.isdir(folder):
+            messagebox.showwarning("Dossier", "Choisis un dossier audio valide.")
+            return
+        try:
+            from analyze_music import prepare_dataset
+            generated = prepare_dataset(folder, generate_missing_json=True)
+            if generated:
+                messagebox.showinfo("JSON générés",
+                    f"✅ {len(generated)} fichiers .json créés.\n\nRemplis les champs bpm, keyscale et caption avant l'entraînement.\n\nPremier fichier : {generated[0]}")
+            else:
+                messagebox.showinfo("JSON", "Tous les morceaux ont déjà un .json.")
+        except Exception as e:
+            messagebox.showerror("Erreur", str(e))
+
+    def _show_music_summary(self, s):
+        gc = s.get("grade_counts", {})
+        bpm_r = s.get("bpm_range")
+        keys = s.get("unique_keys", [])
+        txt = (
+            f"📁 Morceaux : {s['total']}\n"
+            f"⏱ Durée totale : {s['total_duration_min']} min\n"
+            f"⌛ Durée moy. : {s['avg_duration_s']} s\n\n"
+            f"Notes :\n"
+            + "".join(f"  {g} : {gc.get(g,0)}\n" for g in "ABCDF")
+            + f"\n🎯 Score global : {s['overall_score']}\n"
+            + ("✅ Prêt pour ACE-Step\n" if s.get('ace_step_ready') else "⚠️ Corrige les problèmes\n")
+            + f"\n📊 Diversité :\n"
+            f"  BPM : {bpm_r[0]}–{bpm_r[1]}" if bpm_r else "  BPM : non renseigné"
+        )
+        if keys:
+            txt += f"\n  Tonalités ({len(keys)}) : {', '.join(keys[:6])}"
+            if len(keys) > 6:
+                txt += f"…+{len(keys)-6}"
+        txt += (
+            f"\n\n⚠️ Problèmes fréquents :\n"
+            + "\n".join(f"  • {i['issue']} ({i['count']}×)" for i in s.get('top_issues', []))
+            + f"\n\n💡 Recommandation :\n{s.get('recommendation', '')}"
+        )
+        self._set_music_summary(txt)
+
+    def _set_music_summary(self, txt):
+        self.music_summary_text.config(state="normal")
+        self.music_summary_text.delete("1.0", "end")
+        self.music_summary_text.insert("1.0", txt)
+        self.music_summary_text.config(state="disabled")
+
+    def _open_ace_step(self):
+        bat = r"C:\AI\ACE-Step-1.5\start_gradio_ui.bat"
+        if os.path.exists(bat):
+            subprocess.Popen(["cmd", "/c", "start", "", bat], shell=False)
+        else:
+            messagebox.showinfo("ACE-Step", f"ACE-Step introuvable :\n{bat}")
 
     def _build_config_tab(self, parent):
         frame = Frame(parent, bg=BG, padx=20, pady=20)
