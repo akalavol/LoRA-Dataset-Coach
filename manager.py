@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 import tkinter as tk
-from tkinter import Tk, Frame, Label, Button, StringVar, Text, filedialog, messagebox, ttk
+from tkinter import Tk, Frame, Label, Button, Entry, StringVar, Text, filedialog, messagebox, ttk
 
 # PIL pour le preview live des photos analysees (optionnel)
 try:
@@ -48,6 +48,7 @@ ACCENT   = "#89b4fa"   # blue
 ACCENT2  = "#f5c2e7"   # pink
 GREEN    = "#a6e3a1"
 RED      = "#f38ba8"
+ORANGE   = "#fab387"   # peach (warnings / grade C)
 YELLOW   = "#f9e2af"
 
 FONT_TITLE  = ("Segoe UI", 18, "bold")
