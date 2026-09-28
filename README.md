@@ -1,6 +1,6 @@
 # 🧬 LoRA-Dataset-Coach
 
-> The 2026-grade Swiss army knife for preparing, validating and evaluating LoRA training datasets — for **photo (SDXL, Flux, SD 3.5, Pony, Illustrious, NoobAI...)** and **video (Wan 2.x, HunyuanVideo, LTX-Video, CogVideoX, Mochi, Open-Sora)** models.
+> The 2026-grade Swiss army knife for preparing, validating and evaluating LoRA training datasets — for **image (FLUX.2, Qwen-Image, Z-Image, Chroma1, FLUX.1, SDXL, Pony, Illustrious, NoobAI...)** and **video (Wan 2.2, HunyuanVideo 1.5, LTX-2.x, MiniMax-H3)** models.
 
 [![License](https://img.shields.io/badge/license-Source--Available-orange.svg)](LICENSE)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)
@@ -13,12 +13,12 @@
 LoRA-Dataset-Coach is a **complete pipeline** that takes a folder of images and walks you through the full LoRA training workflow:
 
 1. **Analyze** every image individually (face detection, identity match, quality, expression, pose, aesthetic, AI-generation detection, anatomical artifacts)
-2. **Score** the dataset globally with a grade (A/B/C/D/F) and a **per-target-family rating** (SDXL classic, SDXL anime, Flux, Wan video, video other)
+2. **Score** the dataset globally with a grade (A/B/C/D/F) and a **per-target-family rating** (SDXL classic, SDXL anime, FLUX.1, 2025-26 image models, Wan 2.2, 2025-26 video models, legacy video)
 3. **Suggest** what's missing ("generate 3 more profile shots", "vary expressions", "too many white shirts → overfit risk")
 4. **Auto-caption** with WD14 tags, Florence-2 or the 2026 standard **JoyCaption Beta One**
 5. **Clean** the dataset (move rejects, recover blurry, deduplicate)
 6. **Generate** masked training masks via BriaRMBG (for OneTrainer masked loss)
-7. **Export** a ready-to-train folder for **19 different LoRA trainers** (Kohya, ai-toolkit, musubi-tuner, diffusion-pipe, cogvideox-factory, OneTrainer...)
+7. **Export** a ready-to-train folder for **30 LoRA targets** (Kohya, ai-toolkit, musubi-tuner, diffusion-pipe, OneTrainer...)
 8. **Evaluate** the finished LoRA post-training with R-FaceSim, Copycat Detector, Black Hole Ranking (MirrorMetrics-inspired)
 
 The whole thing runs in a single Tkinter GUI with a live preview that scrolls through every photo as it's analyzed.
@@ -84,7 +84,7 @@ On first analysis run, the tool will auto-download the needed models from Huggin
 | Move rejects / recover blurry | ✅ | Auto-folder + SUPIR/UltraSharp README |
 | Caption inline editor | ✅ | Edit WD14/Florence/JoyCaption in popup, saves to .txt + cache |
 | **Subject masks (BriaRMBG)** | ✅ | OneTrainer masked training |
-| Multi-target LoRA prep | ✅ | 19 targets, auto-crops, configs, READMEs |
+| Multi-target LoRA prep | ✅ | 30 targets, auto-crops, configs, launch scripts, READMEs |
 | **Targeted prompt generator** | ✅ | Exports ComfyUI workflows to fill missing shot types |
 | **Post-train LoRA evaluator** | ✅ | R-FaceSim, Copycat, Black Hole Ranking |
 | PDF report export | ✅ | Landscape A4 with Catppuccin theme |
@@ -94,32 +94,43 @@ On first analysis run, the tool will auto-download the needed models from Huggin
 
 ## Supported LoRA training targets
 
-The **🧬 Prepare LoRA** action exports a ready-to-train folder for any of these:
+The **🧬 Prepare LoRA** action exports a ready-to-train folder for any of these.
+Commands and `arch` names for the 2025-2026 targets were checked against the
+musubi-tuner / ai-toolkit source on **2026-09-28**.
+
+### ✨ Image 2025-2026 (LLM text encoders → long natural captions)
+- `flux2_dev_aitoolkit` — FLUX.2 [dev] 32B via ai-toolkit (`arch: flux2`)
+- `flux2_klein_aitoolkit` — FLUX.2 [klein] 9B base via ai-toolkit (`arch: flux2_klein_9b`)
+- `flux2_musubi` — FLUX.2 dev / klein-base via musubi-tuner (`.bat` with cache + train)
+- `qwen_image_musubi` / `qwen_image_aitoolkit` — Qwen-Image
+- `zimage_musubi` / `zimage_aitoolkit` — Z-Image (Base; Turbo needs the de-turbo adapter)
+- `chroma_aitoolkit` — Chroma1 Base
+
+### 🎬 Video 2025-2026
+- `wan22_musubi` — Wan 2.2 A14B T2V, high + low noise experts in one run
+- `wan22_aitoolkit` — Wan 2.2 A14B T2V, 24 GB recipe
+- `hunyuan15_musubi` — HunyuanVideo 1.5 T2V
+- `ltx2_aitoolkit` — LTX-2 / 2.3 / 2.5 (audio+video) via ai-toolkit
+- `minimax_h3_musubi` — MiniMax-H3 image LoRA (experimental, de-distillation adapter, **check the license for your country**)
+
+> A photo dataset teaches a video model **appearance**, not motion. For motion, train on clips.
 
 ### 📸 Photo / Realistic
-- `sdxl_kohya` — SDXL via Kohya SS GUI
-- `sd15_kohya` — SD 1.5 via Kohya
-- `sd35_kohya` — SD 3.5 Large via Kohya (sd3 branch)
-- `hunyuan_dit_kohya` — HunyuanDiT
-- `sana_diffpipe` — Sana (NVIDIA) via diffusion-pipe
-- `flux_aitoolkit` — Flux via ai-toolkit (ostris)
-- `flux_kohya` — Flux via Kohya (sd3 branch)
-- `chroma_aitoolkit` — Chroma (Flux variant uncensored)
-- `onetrainer_sdxl` — SDXL via OneTrainer
+- `sdxl_kohya`, `onetrainer_sdxl` — SDXL
+- `flux_aitoolkit`, `flux_kohya` — FLUX.1 dev
 
 ### 🎨 Anime / Style (SDXL forks)
-- `pony_kohya` — Pony Diffusion XL (auto quality prefix `score_9, score_8_up, score_7_up...`)
-- `illustrious_kohya` — Illustrious XL (auto `masterpiece, best quality, very aesthetic, absurdres`)
-- `noobai_kohya` — NoobAI XL (auto `masterpiece, best quality, newest, absurdres, highres`)
+- `pony_kohya`, `illustrious_kohya`, `noobai_kohya` (auto quality prefixes)
 
-### 🎬 Video
-- `wan21_musubi` — Wan 2.1 via musubi-tuner
-- `wan22_musubi` — Wan 2.2 via musubi-tuner
-- `hunyuan_diffpipe` — HunyuanVideo via diffusion-pipe
-- `ltx_video_diffpipe` — LTX-Video (Lightricks) via diffusion-pipe
-- `cogvideox_diffpipe` — CogVideoX 5B via cogvideox-factory
-- `mochi_diffpipe` — Mochi 1 (Genmo) via diffusion-pipe
-- `open_sora_diffpipe` — Open-Sora 2.0 (HPC-AI)
+### 🗄 Legacy (kept for compatibility)
+`sd15_kohya`, `sd35_kohya`, `hunyuan_dit_kohya`, `sana_diffpipe`, `wan21_musubi`,
+`hunyuan_diffpipe` (HunyuanVideo 1), `ltx_video_diffpipe` (LTX 0.9), `cogvideox_diffpipe`,
+`mochi_diffpipe`, `open_sora_diffpipe`
+
+### ❌ Not exportable from a photo dataset (shown in the GUI)
+- **FramePack / FramePack-F1** — musubi-tuner trains it on videos only (one-frame mode needs start→target image pairs)
+- **Wan 2.5 / 2.6 / 2.7**, **MiniMax Hailuo** — API only, no weights
+- **HunyuanImage 3.0** — open weights but no LoRA trainer supports it yet
 
 For each target, the tool generates the correct:
 - **Crop strategy** (square_face for SDXL, multi-bucket for Flux/Wan)

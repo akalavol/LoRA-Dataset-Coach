@@ -108,9 +108,10 @@ def _grade_from_score(s):
 
 
 def _compute_target_scores(results, viable_imgs, summary, n_viable):
-    """Note specifique pour chaque famille de target (SDXL / Flux / Wan / Anime).
-    Pas une note par target individuel (19 targets x calculs), mais regroupe
-    en 5 familles : SDXL_classic, SDXL_anime, Flux, Wan_video, Hunyuan_video.
+    """Note specifique pour chaque famille de target.
+    Pas une note par target individuel, mais regroupe en 7 familles :
+    SDXL classique, SDXL anime, FLUX.1, Image 2025-26 (encodeur LLM),
+    Wan 2.2, Video 2025-26, Video legacy.
     """
     if not viable_imgs:
         return {}
@@ -210,10 +211,47 @@ def _compute_target_scores(results, viable_imgs, summary, n_viable):
     # Pas d'artefacts severes (sur 5)
     if art_high == 0: s += 5
 
-    scores["Flux"] = {
+    scores["FLUX.1"] = {
         "score": min(100, s), "grade": _grade_from_score(min(100, s)),
         "reason": ", ".join(reasons) if reasons else "tout en ordre",
-        "applies_to": ["flux_aitoolkit", "flux_kohya", "chroma_aitoolkit"],
+        "applies_to": ["flux_aitoolkit", "flux_kohya"],
+    }
+
+    # ============ FAMILLE 3b : Image 2025-2026 a encodeur LLM ============
+    # FLUX.2 (Mistral / Qwen3), Qwen-Image (Qwen2.5-VL), Z-Image (Qwen3), Chroma1.
+    # Un LLM lit la caption comme une phrase : des tags booru sont du bruit,
+    # une description longue et precise est le facteur n°1.
+    s = 0
+    reasons = []
+    if n_viable >= 25: s += 20
+    elif n_viable >= 15: s += 17
+    elif n_viable >= 10: s += 12
+    else: s += 5; reasons.append(f"seulement {n_viable} viables")
+    # Resolution (sur 20) : ces modeles s'entrainent a 1 MP et plus
+    if res_1024_count / max(n_viable, 1) >= 0.9: s += 20
+    elif res_1024_count / max(n_viable, 1) >= 0.5: s += 12
+    else: s += 3; reasons.append("res < 1024 : upscale avant (modeles 1 MP+)")
+    # Captions naturelles LONGUES (sur 30)
+    long_caps_llm = sum(1 for r in viable_imgs
+                        if len(r.get("joycaption") or r.get("natural_caption") or "") >= 150)
+    if long_caps_llm / max(n_viable, 1) >= 0.8: s += 30
+    elif has_natural / max(n_viable, 1) >= 0.8: s += 18; reasons.append("captions trop courtes pour un encodeur LLM")
+    elif has_wd14 / max(n_viable, 1) >= 0.8: s += 4; reasons.append("tags WD14 = inadaptés (encodeur LLM), JoyCaption requis")
+    else: s += 0; reasons.append("captions manquantes")
+    # Diversite AR (sur 10)
+    s += {3: 10, 2: 7}.get(ar_variety, 3)
+    # Diversite globale (sur 15)
+    s += int(diversity_score * 0.15)
+    # Artefacts (sur 5)
+    if art_high == 0: s += 5
+    else: reasons.append(f"{art_high} artefacts")
+
+    scores["Image 2025-26 (FLUX.2 / Qwen-Image / Z-Image)"] = {
+        "score": min(100, s), "grade": _grade_from_score(min(100, s)),
+        "reason": ", ".join(reasons) if reasons else "tout en ordre",
+        "applies_to": ["flux2_dev_aitoolkit", "flux2_klein_aitoolkit", "flux2_musubi",
+                       "qwen_image_musubi", "qwen_image_aitoolkit", "zimage_musubi",
+                       "zimage_aitoolkit", "chroma_aitoolkit"],
     }
 
     # ============ FAMILLE 4 : Wan vidéo (ratios vidéo, captions très longues) ============
@@ -242,17 +280,50 @@ def _compute_target_scores(results, viable_imgs, summary, n_viable):
     # Diversite globale (sur 15)
     s += int(diversity_score * 0.15)
 
-    scores["Wan vidéo"] = {
-        "score": min(100, s), "grade": _grade_from_score(min(100, s)),
-        "reason": ", ".join(reasons) if reasons else "tout en ordre",
-        "applies_to": ["wan21_musubi", "wan22_musubi"],
+    wan_score = min(100, s)
+    wan_reasons = reasons + ["photos seules : apparence apprise, pas le mouvement"]
+    scores["Wan 2.2 vidéo"] = {
+        "score": wan_score, "grade": _grade_from_score(wan_score),
+        "reason": ", ".join(wan_reasons),
+        "applies_to": ["wan22_musubi", "wan22_aitoolkit", "wan21_musubi"],
     }
 
-    # ============ FAMILLE 5 : Vidéo Hunyuan/Mochi/Open-Sora/LTX/CogVideoX ============
-    s = max(0, scores["Wan vidéo"]["score"] - 5)  # similaire mais légèrement plus exigeant
-    scores["Vidéo (Hunyuan/Mochi/LTX/CogVideoX)"] = {
+    # ============ FAMILLE 5 : Vidéo 2025-2026 (HunyuanVideo 1.5 / LTX-2 / MiniMax-H3) ============
+    # Encodeurs VLM (Qwen2.5-VL, Gemma, Qwen3-VL) + modeles 16:9 : on exige des
+    # captions longues ET des cadrages paysage/portrait, pas seulement du carre.
+    s = 0
+    reasons = []
+    if n_viable >= 30: s += 20
+    elif n_viable >= 20: s += 15
+    elif n_viable >= 10: s += 8
+    else: s += 3; reasons.append(f"seulement {n_viable} viables")
+    if res_1024_count / max(n_viable, 1) >= 0.7: s += 15
+    elif res_512_count / max(n_viable, 1) >= 0.9: s += 10
+    else: s += 3; reasons.append("resolution faible")
+    long_caps_v = sum(1 for r in viable_imgs
+                      if len(r.get("joycaption") or r.get("natural_caption") or "") >= 150)
+    if long_caps_v / max(n_viable, 1) >= 0.8: s += 25
+    elif has_natural / max(n_viable, 1) >= 0.8: s += 14; reasons.append("captions trop courtes (encodeur VLM)")
+    else: s += 2; reasons.append("captions naturelles détaillées requises")
+    if po >= 3 and la >= 3: s += 15
+    elif po >= 1 and la >= 1: s += 8
+    else: s += 2; reasons.append("aucun cadrage 16:9/9:16")
+    s += int(diversity_score * 0.15)
+    if art_high == 0: s += 10
+    else: reasons.append(f"{art_high} artefacts")
+    reasons.append("photos seules : apparence apprise, pas le mouvement")
+    s = min(100, s)
+    scores["Vidéo 2025-26 (HunyuanVideo 1.5 / LTX-2 / MiniMax-H3)"] = {
         "score": s, "grade": _grade_from_score(s),
-        "reason": "même critères que Wan mais ces modèles demandent souvent des clips MP4 en plus",
+        "reason": ", ".join(reasons),
+        "applies_to": ["hunyuan15_musubi", "ltx2_aitoolkit", "minimax_h3_musubi"],
+    }
+
+    # ============ FAMILLE 6 : Vidéo legacy (HunyuanVideo 1 / LTX 0.9 / Mochi / CogVideoX) ============
+    s = max(0, wan_score - 5)
+    scores["Vidéo legacy (Hunyuan 1/LTX 0.9/Mochi/CogVideoX)"] = {
+        "score": s, "grade": _grade_from_score(s),
+        "reason": "modèles dépassés — préfère Wan 2.2, HunyuanVideo 1.5 ou LTX-2",
         "applies_to": ["hunyuan_diffpipe", "ltx_video_diffpipe",
                          "cogvideox_diffpipe", "mochi_diffpipe", "open_sora_diffpipe"],
     }
@@ -1649,7 +1720,10 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
     summary["target_scores"] = target_scores
     # Tri par score decroissant pour suggerer le meilleur
     if target_scores:
-        best_target = max(target_scores.items(), key=lambda x: x[1]["score"])
+        # Jamais recommander une famille legacy comme "meilleur target"
+        candidates = {k: v for k, v in target_scores.items() if "legacy" not in k.lower()} \
+            or target_scores
+        best_target = max(candidates.items(), key=lambda x: x[1]["score"])
         recommendations.append(
             f"🎯 Meilleur target pour ce dataset : « {best_target[0]} » "
             f"({best_target[1]['grade']}, {best_target[1]['score']}/100) — "
@@ -1818,7 +1892,7 @@ def analyze(folder, mode="full", ref_image=None, captioner_mode="wd14",
         elif la_pct > 0.5:
             ar_target_recos.append("🖼 Dominante paysage → Wan I2V/T2V paysage, Flux paysage OK")
         elif sq_pct > 0.3 and po_pct > 0.2 and la_pct > 0.1:
-            ar_target_recos.append("✅ Mix sain de ratios → idéal Flux/Wan multi-bucket")
+            ar_target_recos.append("✅ Mix sain de ratios → idéal FLUX.2/Qwen-Image/Wan 2.2/LTX-2 multi-bucket")
 
     summary["aspect_ratio_distribution"] = ar_distribution
     summary["aspect_ratio_alerts"] = ar_alerts

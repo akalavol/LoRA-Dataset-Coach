@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.2.0] — 2026-09-28
+
+### Added — 2025-2026 model targets (11 new, 30 total)
+Verified against the musubi-tuner / ai-toolkit source code on 2026-09-28:
+- **Image**: FLUX.2 [dev] and [klein] (ai-toolkit + musubi-tuner), Qwen-Image
+  (musubi + ai-toolkit), Z-Image (musubi + ai-toolkit), Chroma1 Base (ai-toolkit `arch: chroma`).
+- **Video**: Wan 2.2 A14B via ai-toolkit, HunyuanVideo 1.5 (musubi), LTX-2.x (ai-toolkit),
+  MiniMax-H3 image LoRA (musubi, experimental, with de-distillation adapter).
+- Generic `musubi_generic` / `aitoolkit_generic` generators: adding a model is now a
+  catalogue entry, not a new function. musubi exports get a `.bat` that runs
+  latent caching → text-encoder caching → training.
+- Each target carries `notes` + `verified` date, shown in the GUI and README.
+- GUI lists the trendy models that **cannot** be trained from photos (FramePack,
+  Wan 2.5+, Hailuo, HunyuanImage 3.0) and why.
+
+### Changed
+- New categories: "Image 2025-2026", "Video 2025-2026", "Legacy". SD 1.5, SD 3.5,
+  HunyuanDiT, Sana, Wan 2.1, HunyuanVideo 1, LTX 0.9, CogVideoX, Mochi, Open-Sora moved to Legacy.
+- Per-family scoring: 7 families. New "Image 2025-26" family heavily weights long
+  natural captions (WD14 tags are penalised for LLM text encoders); new "Video 2025-26"
+  family has its own criteria instead of "Wan score − 5". Legacy families are never
+  recommended as best target.
+
+### Fixed
+- `wan22_musubi` generated an unusable config: GGUF checkpoint (musubi cannot train GGUF),
+  `--task t2v-14B` (Wan 2.1 task) and a single expert. Now `t2v-A14B` with
+  `--dit` + `--dit_high_noise`, `--timestep_boundary 0.875` and the Wan 2.1 VAE.
+- Subject masks were written to `10_<persona>/` regardless of the target's repeats
+  (Pony = 8, FLUX.1 Kohya = 4) and missed the images.
+
+---
+
 ## [v1.1.0] — 2026-06-05
 
 ### Added — Audio dataset analysis (Voice & Music)

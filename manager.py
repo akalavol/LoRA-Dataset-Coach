@@ -1148,13 +1148,13 @@ class App:
         for val, lbl, tip in (
             ("wd14",       "WD14 tags",       "Tags booru SDXL/Kohya (~30 s, 330 Mo)"),
             ("natural",    "Florence-2",      "Caption naturelle, rapide mais hallucine sur personnes"),
-            ("joycaption", "JoyCaption ⭐",   "STANDARD 2026 Flux/Wan persona (lent, 4-8 Go modèle)"),
+            ("joycaption", "JoyCaption ⭐",   "Captions longues : FLUX.2/Qwen-Image/Z-Image/Wan/LTX-2 (lent, 4-8 Go)"),
             ("all",        "Tous",            "WD14 + Florence + JoyCaption (très lent, exhaustif)"),
         ):
             tk.Radiobutton(cap_frame, text=lbl, variable=self.captioner_mode, value=val,
                             font=FONT_BODY, fg=TEXT, bg=CARD, selectcolor=BG2,
                             activebackground=CARD, activeforeground=TEXT).pack(side="left", padx=6)
-        Label(cap_frame, text="(WD14 pour SDXL · JoyCaption pour Flux/Wan)",
+        Label(cap_frame, text="(WD14 pour SDXL/Pony · JoyCaption pour tous les modèles 2025-26)",
               font=FONT_SMALL, fg=TEXT_DIM, bg=CARD).pack(side="left", padx=8)
 
         # Barre de progression + ligne phase + ETA
@@ -1880,7 +1880,7 @@ class App:
                       font=FONT_BODY, fg=color, bg=CARD,
                       anchor="w", wraplength=900, justify="left").pack(fill="x")
 
-        # ===== SCORES PAR TARGET (5 familles) =====
+        # ===== SCORES PAR TARGET (7 familles) =====
         if target_scores:
             Label(self.analyzer_verdict_frame, text="🎯 Scores par famille de target :",
                   font=FONT_H1, fg=ACCENT, bg=CARD, anchor="w").pack(fill="x", pady=(10, 4))
@@ -2315,7 +2315,7 @@ class App:
         dlg = tk.Toplevel(self.root)
         dlg.title("Préparer dataset LoRA")
         dlg.configure(bg=BG)
-        dlg.geometry("620x520")
+        dlg.geometry("640x640")
         dlg.transient(self.root)
         dlg.grab_set()
 
@@ -2341,7 +2341,7 @@ class App:
         for key, _ in lora_prep.list_targets():
             cat = lora_prep.get_target_category(key)
             targets_by_cat.setdefault(cat, []).append(key)
-        cat_order = ["image_photo", "image_anime", "video"]
+        cat_order = getattr(lora_prep, "CATEGORY_ORDER", ["image_photo", "image_anime", "video"])
         combo_values = []
         for cat in cat_order:
             if cat in targets_by_cat:
@@ -2357,7 +2357,14 @@ class App:
         target_combo.pack(fill="x", padx=20, pady=(2, 4))
         target_info = Label(dlg, text="", font=FONT_SMALL, fg=TEXT_DIM, bg=BG,
                              justify="left", wraplength=580)
-        target_info.pack(anchor="w", padx=20, pady=(0, 12))
+        target_info.pack(anchor="w", padx=20, pady=(0, 4))
+        # Modeles a la mode SANS export possible depuis des photos (evite de chercher en vain)
+        not_exp = getattr(lora_prep, "NOT_EXPORTABLE", {})
+        if not_exp:
+            Label(dlg, text="Pas d'export possible : " + ", ".join(not_exp) +
+                            "  (détails dans le README de chaque export)",
+                  font=FONT_SMALL, fg=TEXT_DIM, bg=BG, justify="left",
+                  wraplength=580).pack(anchor="w", padx=20, pady=(0, 12))
 
         def update_target_info(*_):
             sel = target_var.get()
@@ -2375,6 +2382,8 @@ class App:
                 note = "  ⭐ JoyCaption recommandé (relance l'analyse en mode 'joycaption' ou 'all')."
             if q_prefix:
                 note += f"\n   🏷 Quality tags auto-ajoutés : « {q_prefix} »"
+            if cfg.get("notes"):
+                note += f"\n   ℹ {cfg['notes']}"
             target_info.config(
                 text=(f"→ {label}\n"
                       f"   Résolution(s) : {res}   |   Captioner conseillé : {cap}\n"
@@ -2455,7 +2464,8 @@ class App:
                 if with_masks:
                     self.root.after(0, lambda: self.status_var.set("Génération masques sujet…"))
                     images_subfolder = lora_prep.TARGETS[target].get("folder_naming") == "kohya"
-                    masks_target = out_folder / (f"10_{persona}" if images_subfolder else "images")
+                    rep = lora_prep.TARGETS[target].get("default_repeats") or 10
+                    masks_target = out_folder / (f"{rep}_{persona}" if images_subfolder else "images")
                     try:
                         # Driver inline
                         driver = (
