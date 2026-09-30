@@ -70,6 +70,9 @@ DEFAULT_CONFIG = {
     "datasets_dir": "C:\\AI\\datasets",
     # Compute device: "auto" (GPU si dispo) | "cuda" | "cpu"
     "device": "auto",
+    # ComfyUI local (evaluateur : generation automatique du jeu de test)
+    "comfyui_url": "http://127.0.0.1:8188",
+    "comfyui_eval_workflow": "",
 }
 
 
@@ -256,6 +259,9 @@ class App:
         make_button(train_frame, "📂",
                      lambda: pick_folder_for(self.eval_train_path)).pack(side="left")
 
+        # === Generation automatique via ComfyUI local ===
+        self._build_comfy_eval_card(frame)
+
         # Bouton lancer
         Button(frame, text="🚀 Évaluer le LoRA", font=FONT_H1, bg=ACCENT2, fg=BG,
                relief="flat", padx=20, pady=10, cursor="hand2",
@@ -302,6 +308,158 @@ class App:
         self.eval_tree.tag_configure("warn", foreground=YELLOW)
         self.eval_tree.tag_configure("err", foreground=RED)
 
+    def _build_comfy_eval_card(self, frame):
+        """Carte : genere le jeu de test dans ComfyUI (avec LoRA + baseline sans LoRA)."""
+        outer = Frame(frame, bg=CARD, padx=10, pady=6)
+        outer.pack(fill="x", pady=4)
+        # Repliee par defaut : depliee, elle pousse le verdict hors de la fenetre
+        card = Frame(outer, bg=CARD)
+        toggle = Button(outer, font=FONT_BODY, fg=ACCENT, bg=CARD, relief="flat", anchor="w",
+                        activebackground=CARD, cursor="hand2")
+
+        def set_open(opened):
+            if opened:
+                card.pack(fill="x", pady=(4, 0))
+            else:
+                card.pack_forget()
+            toggle.config(text=("▾" if opened else "▸") +
+                               " 🎨 Générer les images de test avec ComfyUI local (optionnel)",
+                          command=lambda: set_open(not opened))
+        toggle.pack(fill="x")
+        set_open(bool(self.cfg.get("comfyui_eval_workflow")))
+
+        self.comfy_url = StringVar(value=self.cfg.get("comfyui_url", "http://127.0.0.1:8188"))
+        self.comfy_wf = StringVar(value=self.cfg.get("comfyui_eval_workflow", ""))
+        self.comfy_lora = StringVar(value="")
+        self.comfy_trigger = StringVar(value="ohwx")
+        self.comfy_n = tk.IntVar(value=20)
+        self.comfy_strength = tk.DoubleVar(value=1.0)
+        self.comfy_baseline = tk.BooleanVar(value=True)
+
+        def entry(parent, var, width):
+            return tk.Entry(parent, textvariable=var, font=FONT_MONO, width=width, bg=BG2,
+                            fg=TEXT, insertbackground=TEXT, relief="flat")
+
+        Label(card, text="URL :", font=FONT_SMALL, fg=TEXT, bg=CARD).grid(row=1, column=0, sticky="w")
+        entry(card, self.comfy_url, 24).grid(row=1, column=1, sticky="w", padx=4, pady=2)
+        Label(card, text="Workflow (format API) :", font=FONT_SMALL, fg=TEXT, bg=CARD).grid(row=1, column=2, sticky="e")
+        entry(card, self.comfy_wf, 34).grid(row=1, column=3, sticky="we", padx=4)
+
+        def pick_wf():
+            f = filedialog.askopenfilename(title="Workflow ComfyUI exporté en format API",
+                                           filetypes=[("Workflow API", "*.json")])
+            if f:
+                self.comfy_wf.set(f)
+        make_button(card, "📂", pick_wf).grid(row=1, column=4, sticky="w")
+
+        Label(card, text="LoRA :", font=FONT_SMALL, fg=TEXT, bg=CARD).grid(row=2, column=0, sticky="w")
+        self.comfy_lora_combo = ttk.Combobox(card, textvariable=self.comfy_lora, width=34,
+                                             state="readonly", font=FONT_SMALL)
+        self.comfy_lora_combo.grid(row=2, column=1, columnspan=2, sticky="w", padx=4, pady=2)
+        make_button(card, "🔄 Lister", self._comfy_refresh_loras).grid(row=2, column=3, sticky="w")
+
+        opts = Frame(card, bg=CARD)
+        opts.grid(row=3, column=0, columnspan=6, sticky="w", pady=(2, 0))
+        Label(opts, text="Trigger :", font=FONT_SMALL, fg=TEXT, bg=CARD).pack(side="left")
+        entry(opts, self.comfy_trigger, 12).pack(side="left", padx=(2, 10))
+        Label(opts, text="Images :", font=FONT_SMALL, fg=TEXT, bg=CARD).pack(side="left")
+        tk.Spinbox(opts, from_=5, to=100, textvariable=self.comfy_n, width=4,
+                   font=FONT_SMALL).pack(side="left", padx=(2, 10))
+        Label(opts, text="Force :", font=FONT_SMALL, fg=TEXT, bg=CARD).pack(side="left")
+        tk.Spinbox(opts, from_=0.1, to=2.0, increment=0.1, textvariable=self.comfy_strength,
+                   width=4, font=FONT_SMALL).pack(side="left", padx=(2, 10))
+        tk.Checkbutton(opts, text="Baseline A/B (mêmes seeds, sans LoRA)",
+                       variable=self.comfy_baseline, font=FONT_SMALL, fg=TEXT, bg=CARD,
+                       selectcolor=BG2, activebackground=CARD).pack(side="left", padx=4)
+        self.comfy_gen_btn = Button(opts, text="🎨 Générer puis évaluer", font=FONT_BODY,
+                                    bg=ACCENT, fg=BG, relief="flat", padx=10,
+                                    command=self._run_comfy_generation)
+        self.comfy_gen_btn.pack(side="left", padx=8)
+        Label(card, text="   Workflow : ComfyUI > Workflow > Export (API). Il doit contenir un node "
+                         "LoraLoader et un SaveImage ; mets {prompt} dans le texte positif "
+                         "(sinon il est détecté via le sampler).",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=CARD, wraplength=880,
+              justify="left").grid(row=4, column=0, columnspan=6, sticky="w")
+
+    def _comfy_refresh_loras(self):
+        import comfyui_client as cc
+        url = self.comfy_url.get().strip().rstrip("/")
+        def worker():
+            try:
+                loras = cc.list_loras(url)
+                def done():
+                    self.comfy_lora_combo.config(values=loras)
+                    if loras and not self.comfy_lora.get():
+                        self.comfy_lora.set(loras[0])
+                    self.eval_phase.config(text=f"✅ ComfyUI : {len(loras)} LoRA trouvés", fg=GREEN)
+                self.root.after(0, done)
+            except Exception as e:
+                self.root.after(0, lambda e=e: self.eval_phase.config(
+                    text=f"❌ ComfyUI injoignable sur {url} ({e})", fg=RED))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _run_comfy_generation(self):
+        import comfyui_client as cc
+        url = self.comfy_url.get().strip().rstrip("/")
+        wf_path, lora = self.comfy_wf.get().strip(), self.comfy_lora.get().strip()
+        ref = self.eval_ref_path.get()
+        if not Path(wf_path).is_file():
+            messagebox.showerror("Workflow", "Choisis le workflow ComfyUI exporté en format API.")
+            return
+        if not lora:
+            messagebox.showerror("LoRA", "Clique « 🔄 Lister » puis choisis le LoRA à évaluer.")
+            return
+        if not Path(ref).is_dir():
+            messagebox.showerror("Référence", "Renseigne d'abord le dossier de photos RÉELLES du sujet.")
+            return
+        # Verification du workflow AVANT de lancer 40 generations
+        try:
+            info = cc.inspect_workflow(cc.load_api_workflow(wf_path))
+        except Exception as e:
+            messagebox.showerror("Workflow invalide", str(e))
+            return
+        if info["problems"]:
+            messagebox.showerror("Workflow inutilisable", "\n".join("• " + p for p in info["problems"]))
+            return
+
+        self.cfg["comfyui_url"], self.cfg["comfyui_eval_workflow"] = url, wf_path
+        try:
+            save_config(self.cfg)
+        except Exception:
+            pass
+        out = Path(self.eval_gen_path.get() or ".") / f"{Path(lora).stem}_{datetime.now():%Y%m%d_%H%M}"
+        self.eval_gen_path.set(str(out))
+        n, strength, base = self.comfy_n.get(), self.comfy_strength.get(), self.comfy_baseline.get()
+        self.comfy_gen_btn.config(state="disabled")
+        self.eval_progress.config(mode="determinate", value=0)
+
+        def progress(cur, tot, name):
+            self.root.after(0, lambda: (self.eval_progress.config(value=100 * cur / tot),
+                                        self.eval_phase.config(text=f"🎨 ComfyUI {cur}/{tot} — {name}",
+                                                               fg=ACCENT)))
+
+        def worker():
+            try:
+                r = cc.generate_eval_set(wf_path, lora, self.comfy_trigger.get().strip() or "ohwx",
+                                         out, n_images=n, strength=strength, with_baseline=base,
+                                         base_url=url, progress_cb=progress)
+            except Exception as e:
+                self.root.after(0, lambda e=e: (self.comfy_gen_btn.config(state="normal"),
+                                                self.eval_phase.config(text=f"❌ {e}", fg=RED)))
+                return
+            def done():
+                self.comfy_gen_btn.config(state="normal")
+                if not r["lora"]:
+                    self.eval_phase.config(text="❌ Aucune image générée : " +
+                                           " | ".join(r["errors"][:2]), fg=RED)
+                    return
+                if r["errors"]:
+                    messagebox.showwarning("ComfyUI", f"{len(r['errors'])} génération(s) en échec :\n" +
+                                           "\n".join(r["errors"][:5]))
+                self._run_evaluator()
+            self.root.after(0, done)
+        threading.Thread(target=worker, daemon=True).start()
+
     def _run_evaluator(self):
         gen = self.eval_gen_path.get()
         ref = self.eval_ref_path.get()
@@ -328,77 +486,91 @@ class App:
                           args=(gen, ref, train), daemon=True).start()
 
     def _eval_subprocess(self, gen, ref, train):
-        import time as _time
-        script = str(Path(__file__).parent / "lora_evaluator.py")
+        """Evalue le LoRA ; si un dossier _baseline/ (genere par ComfyUI, meme
+        seeds, LoRA a 0) existe, l'evalue aussi et calcule le GAIN d'identite."""
         try:
-            cmd = [self.comfyui_py, script, gen, ref]
-            if train:
-                cmd.append(train)
-            cmd.append(self.cfg.get("device", "auto"))  # auto/cuda/cpu
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, encoding="utf-8", bufsize=1,
-            )
-
-            last_activity = [_time.time()]
-
-            def read_progress():
-                for raw in iter(proc.stderr.readline, ""):
-                    line = raw.strip()
-                    last_activity[0] = _time.time()
-                    if line.startswith("STEP "):
-                        msg = line[5:]
-                        self.root.after(0, lambda m=msg:
-                            self.eval_phase.config(text=f"⚙ {m}", fg=ACCENT))
-                    elif line.startswith("PROGRESS "):
-                        # PROGRESS REF 5/20 imagename
-                        try:
-                            parts = line.split(" ", 3)
-                            kind = parts[1]
-                            cur, tot = parts[2].split("/")
-                            n = parts[3] if len(parts) > 3 else ""
-                            self.root.after(0, lambda k=kind, c=cur, t=tot, n=n:
-                                self.eval_phase.config(
-                                    text=f"⚙ Embedding {k} {c}/{t} — {n[:30]}", fg=ACCENT))
-                        except Exception:
-                            pass
-
-            stdout_chunks = []
-            def read_stdout():
-                try:
-                    for chunk in iter(proc.stdout.readline, ""):
-                        stdout_chunks.append(chunk)
-                except Exception:
-                    pass
-
-            t_err = threading.Thread(target=read_progress, daemon=True)
-            t_out = threading.Thread(target=read_stdout, daemon=True)
-            t_err.start(); t_out.start()
-
-            # Watchdog d'inactivité (30 min de silence = bloqué)
-            INACTIVITY_LIMIT = 1800
-            killed = False
-            while proc.poll() is None:
-                _time.sleep(2)
-                if _time.time() - last_activity[0] > INACTIVITY_LIMIT:
-                    killed = True
-                    try: proc.kill()
-                    except Exception: pass
-                    break
-            t_out.join(timeout=5); t_err.join(timeout=5)
-
-            if killed:
-                self.root.after(0, lambda: self._show_evaluator_result(
-                    {"error": f"Aucune activité pendant {INACTIVITY_LIMIT//60} min — arrêté."}))
-                return
-
-            stdout = "".join(stdout_chunks)
-            result = json.loads(stdout.strip()) if stdout.strip() else {"error": "no output"}
+            result = self._eval_run_once(gen, ref, train)
+            base_dir = Path(gen) / "_baseline"
+            if "error" not in result and base_dir.is_dir() and any(base_dir.iterdir()):
+                self.root.after(0, lambda: self.eval_phase.config(
+                    text="⚙ Évaluation de la baseline (sans LoRA)...", fg=ACCENT))
+                base = self._eval_run_once(str(base_dir), ref, "")
+                if "error" not in base:
+                    lm = result.get("summary", {}).get("r_facesim_mean")
+                    bm = base.get("summary", {}).get("r_facesim_mean")
+                    result["baseline"] = {"r_facesim_mean": bm,
+                                          "gain": round(lm - bm, 4) if lm is not None and bm is not None else None}
             self.root.after(0, lambda r=result: self._show_evaluator_result(r))
         except Exception as e:
             import traceback
             err = f"{e}\n\n{traceback.format_exc()[-500:]}"
             self.root.after(0, lambda e=err: messagebox.showerror("Erreur évaluation", e))
+
+    def _eval_run_once(self, gen, ref, train):
+        """Lance lora_evaluator.py en subprocess et renvoie son dict resultat."""
+        import time as _time
+        script = str(Path(__file__).parent / "lora_evaluator.py")
+        cmd = [self.comfyui_py, script, gen, ref]
+        if train:
+            cmd.append(train)
+        cmd.append(self.cfg.get("device", "auto"))  # auto/cuda/cpu
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", bufsize=1,
+        )
+
+        last_activity = [_time.time()]
+
+        def read_progress():
+            for raw in iter(proc.stderr.readline, ""):
+                line = raw.strip()
+                last_activity[0] = _time.time()
+                if line.startswith("STEP "):
+                    msg = line[5:]
+                    self.root.after(0, lambda m=msg:
+                        self.eval_phase.config(text=f"⚙ {m}", fg=ACCENT))
+                elif line.startswith("PROGRESS "):
+                    # PROGRESS REF 5/20 imagename
+                    try:
+                        parts = line.split(" ", 3)
+                        kind = parts[1]
+                        cur, tot = parts[2].split("/")
+                        n = parts[3] if len(parts) > 3 else ""
+                        self.root.after(0, lambda k=kind, c=cur, t=tot, n=n:
+                            self.eval_phase.config(
+                                text=f"⚙ Embedding {k} {c}/{t} — {n[:30]}", fg=ACCENT))
+                    except Exception:
+                        pass
+
+        stdout_chunks = []
+        def read_stdout():
+            try:
+                for chunk in iter(proc.stdout.readline, ""):
+                    stdout_chunks.append(chunk)
+            except Exception:
+                pass
+
+        t_err = threading.Thread(target=read_progress, daemon=True)
+        t_out = threading.Thread(target=read_stdout, daemon=True)
+        t_err.start(); t_out.start()
+
+        # Watchdog d'inactivité (30 min de silence = bloqué)
+        INACTIVITY_LIMIT = 1800
+        killed = False
+        while proc.poll() is None:
+            _time.sleep(2)
+            if _time.time() - last_activity[0] > INACTIVITY_LIMIT:
+                killed = True
+                try: proc.kill()
+                except Exception: pass
+                break
+        t_out.join(timeout=5); t_err.join(timeout=5)
+
+        if killed:
+            return {"error": f"Aucune activité pendant {INACTIVITY_LIMIT//60} min — arrêté."}
+
+        stdout = "".join(stdout_chunks)
+        return json.loads(stdout.strip()) if stdout.strip() else {"error": "no output"}
 
     def _show_evaluator_result(self, data):
         self.eval_progress.stop()
@@ -431,6 +603,14 @@ class App:
               font=FONT_H1, fg=color, bg=CARD, anchor="w").pack(fill="x")
         Label(right, text=f"R-FaceSim : moyenne {s.get('r_facesim_mean')} (std {s.get('r_facesim_std')}, min {s.get('r_facesim_min')}, max {s.get('r_facesim_max')})",
               font=FONT_BODY, fg=TEXT_DIM, bg=CARD, anchor="w").pack(fill="x")
+        b = data.get("baseline")
+        if b and b.get("gain") is not None:
+            g = b["gain"]
+            gcol = GREEN if g >= 0.15 else (YELLOW if g >= 0.05 else RED)
+            Label(right, text=(f"A/B ComfyUI : sans LoRA {b['r_facesim_mean']} → avec LoRA "
+                               f"{s.get('r_facesim_mean')}  = gain d'identité {g:+.3f}"
+                               + ("" if g >= 0.05 else "  ⚠️ le LoRA n'apporte quasi rien")),
+                  font=FONT_BODY, fg=gcol, bg=CARD, anchor="w").pack(fill="x")
         if s.get("copycat_count", 0) > 0:
             Label(right, text=f"❌ {s['copycat_count']} copycat detecté(s) (LoRA recopie au lieu de généraliser)",
                   font=FONT_BODY, fg=RED, bg=CARD, anchor="w").pack(fill="x")
@@ -455,11 +635,11 @@ class App:
                       font=FONT_SMALL, fg=TEXT_DIM if entry['ratio'] < 0.3 else YELLOW,
                       bg=CARD, anchor="w").pack(fill="x")
 
+        # Verdict AU-DESSUS du tableau detail. (L'ancien before=eval_progress.master
+        # visait le cadre de l'onglet, gere par le Notebook et non par pack :
+        # TclError, et le tableau par image ne s'affichait jamais.)
         self.eval_verdict_frame.pack(fill="x", padx=10, pady=(0, 6),
-                                       before=self.eval_progress.master if hasattr(self.eval_progress, 'master') else None)
-        # Si le pack avant ne marche pas, pack normalement
-        if not self.eval_verdict_frame.winfo_ismapped():
-            self.eval_verdict_frame.pack(fill="x", padx=10, pady=(0, 6))
+                                       before=self.eval_tree.master)
 
         # Tableau detail
         for entry in data.get("per_image", []):
@@ -590,7 +770,7 @@ class App:
                 self.root.after(0, lambda: self.voice_progress_var.set(
                     f"✅ {summary['total']} fichiers analysés"))
             except ImportError as e:
-                self.root.after(0, lambda: self._set_voice_summary(
+                self.root.after(0, lambda e=e: self._set_voice_summary(
                     f"❌ Module manquant : {e}\n\nInstalle : pip install librosa soundfile"))
 
         threading.Thread(target=run, daemon=True).start()
@@ -727,7 +907,7 @@ class App:
                 self.root.after(0, lambda: self.music_progress_var.set(
                     f"✅ {summary['total']} morceaux analysés"))
             except ImportError as e:
-                self.root.after(0, lambda: self._set_music_summary(
+                self.root.after(0, lambda e=e: self._set_music_summary(
                     f"❌ Module manquant : {e}\n\nInstalle : pip install librosa soundfile mutagen"))
 
         threading.Thread(target=run, daemon=True).start()
@@ -1551,7 +1731,7 @@ class App:
                 data = json.loads(stdout_data)
             except json.JSONDecodeError as e:
                 full = "".join(self._analyzer_stderr_buffer) + "\n\n--- STDOUT (debut) ---\n" + stdout_data[:3000]
-                self.root.after(0, lambda: self._analyzer_done_error(
+                self.root.after(0, lambda e=e, full=full: self._analyzer_done_error(
                     f"Sortie JSON invalide : {e}", full))
                 return
             if "error" in data:
@@ -1563,7 +1743,7 @@ class App:
             import traceback
             self._analyzer_running = False
             full = "".join(self._analyzer_stderr_buffer) + "\n\n--- TRACEBACK GUI ---\n" + traceback.format_exc()
-            self.root.after(0, lambda: self._analyzer_done_error(str(e), full))
+            self.root.after(0, lambda e=e, full=full: self._analyzer_done_error(str(e), full))
 
     def _analyzer_done_error(self, msg, full_details=""):
         self._analyzer_running = False  # stoppe le ticker
@@ -2898,7 +3078,7 @@ class App:
                     self.root.after(2000, lambda: status_widget.config(text=""))
                 return save
 
-            Button(right, text=f"💾 Sauver {ext}", font=FONT_SMALL,
+            Button(right, text=f"💾 Sauver {sidecar_ext}", font=FONT_SMALL,
                    bg=CARD_HI, fg=TEXT, relief="flat", padx=8, pady=4,
                    cursor="hand2",
                    command=make_save_handler()).pack(anchor="e", pady=(2, 6))

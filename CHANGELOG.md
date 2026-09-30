@@ -22,6 +22,19 @@ Verified against the musubi-tuner / ai-toolkit source code on 2026-09-28:
 - GUI lists the trendy models that **cannot** be trained from photos (FramePack,
   Wan 2.5+, Hailuo, HunyuanImage 3.0) and why.
 
+### Added — Evaluator ⇄ local ComfyUI
+- New `comfyui_client.py` (stdlib only) drives a **local ComfyUI** through its HTTP API
+  (`/models/loras`, `/prompt`, `/history`, `/view`).
+- Evaluate tab: collapsible **"Generate test images with ComfyUI"** card. Give your own
+  workflow exported in *API format*, pick the LoRA from the list ComfyUI reports, and the
+  tool patches prompt / seed / LoRA / strength / output prefix, generates N images over
+  10 varied test prompts, then runs the evaluation automatically.
+- **A/B baseline**: the same prompts and seeds with the LoRA at strength 0 go to
+  `_baseline/`. The evaluator scores both and shows the **identity gain**
+  (R-FaceSim with LoRA − without). A gain < 0.05 means the LoRA adds almost nothing.
+- The workflow is checked before the first generation (missing LoRA node, prompt,
+  SaveImage or seed → clear error instead of 40 failed jobs).
+
 ### Changed
 - New categories: "Image 2025-2026", "Video 2025-2026", "Legacy". SD 1.5, SD 3.5,
   HunyuanDiT, Sana, Wan 2.1, HunyuanVideo 1, LTX 0.9, CogVideoX, Mochi, Open-Sora moved to Legacy.
@@ -34,6 +47,11 @@ Verified against the musubi-tuner / ai-toolkit source code on 2026-09-28:
 - `wan22_musubi` generated an unusable config: GGUF checkpoint (musubi cannot train GGUF),
   `--task t2v-14B` (Wan 2.1 task) and a single expert. Now `t2v-A14B` with
   `--dit` + `--dit_high_noise`, `--timestep_boundary 0.875` and the Wan 2.1 VAE.
+- Evaluate tab: the verdict was packed `before=` the tab frame (managed by the
+  Notebook, not pack) → `TclError`, so the per-image table never filled.
+- Caption editor popup crashed on open (`NameError: ext` on the "Save" button label).
+- Voice / Music / Analyzer error paths crashed instead of showing the error
+  (`lambda` referencing the `except ... as e` variable after Python deleted it).
 - Subject masks were written to `10_<persona>/` regardless of the target's repeats
   (Pony = 8, FLUX.1 Kohya = 4) and missed the images.
 

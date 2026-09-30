@@ -86,7 +86,7 @@ On first analysis run, the tool will auto-download the needed models from Huggin
 | **Subject masks (BriaRMBG)** | ✅ | OneTrainer masked training |
 | Multi-target LoRA prep | ✅ | 30 targets, auto-crops, configs, launch scripts, READMEs |
 | **Targeted prompt generator** | ✅ | Exports ComfyUI workflows to fill missing shot types |
-| **Post-train LoRA evaluator** | ✅ | R-FaceSim, Copycat, Black Hole Ranking |
+| **Post-train LoRA evaluator** | ✅ | R-FaceSim, Copycat, Black Hole Ranking, ComfyUI auto-generation + A/B gain |
 | PDF report export | ✅ | Landscape A4 with Catppuccin theme |
 | GitHub auto-update | ✅ | Built-in updater checks releases |
 
@@ -159,6 +159,16 @@ The tool computes the **2026 community standard** metrics:
 | **Mode collapse signal** | Std deviation of R-FaceSim. <0.03 = single mode learned. |
 
 Final verdict: **A** (excellent) to **F** (failed) with specific advice.
+
+### Automatic test set with your local ComfyUI
+Instead of generating the ~30 test images by hand, open **🎨 Generate test images with
+ComfyUI** in the Evaluate tab:
+1. In ComfyUI, export your usual workflow (the one for your model — FLUX.2, Qwen-Image, Wan…)
+   with **Workflow → Export (API)**. It needs a `LoraLoader`/`LoraLoaderModelOnly` node and
+   a `SaveImage` node; put `{prompt}` in the positive text (otherwise it is found through the sampler).
+2. Click **🔄 List** to get the LoRAs ComfyUI sees, choose yours, set the trigger word.
+3. **Generate then evaluate**: N images with the LoRA + the same seeds without it (A/B
+   baseline), then R-FaceSim / Copycat / Black Hole and the **identity gain** of the LoRA.
 
 ---
 
