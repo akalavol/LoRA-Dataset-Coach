@@ -35,6 +35,25 @@ Verified against the musubi-tuner / ai-toolkit source code on 2026-09-28:
 - The workflow is checked before the first generation (missing LoRA node, prompt,
   SaveImage or seed → clear error instead of 40 failed jobs).
 
+### Added — 🏋 "Create LoRA" tab (trainer)
+- New tab between Analyzer and Evaluate: point it at a folder made by **Prepare LoRA**
+  and it detects the runner (`launch_*.bat` → musubi-tuner, `ai_toolkit*.yaml` → ai-toolkit).
+- The `set KEY=...` lines of the musubi `.bat` (MUSUBI_DIR, model paths, MODEL_VERSION)
+  are editable in the GUI, checked for existence, and written back before launch.
+- Live log, progress bar and epoch / step / loss status parsed from tqdm output;
+  **Stop** kills the whole process tree (accelerate sub-processes included).
+- Checkpoints in `output/` are listed live; **Checkpoints → ComfyUI** copies them to
+  `ComfyUI/models/loras/lora_eval/<run>/` and opens the batch test with the filter filled in.
+- Prepare LoRA now pre-fills this tab with the folder it just created.
+- New module `lora_trainer.py` (no Tk dependency).
+
+### Added — 📦 Batch LoRA test (pick the best epoch)
+- Evaluate tab → ComfyUI card: **Test the batch and rank** every LoRA whose name contains a
+  filter (e.g. `lin` → `lin-000001` … `lin-000004`, natural sort). Same prompts, same seeds
+  for all, one shared baseline.
+- Ranking window: verdict score (already penalises copycat / mode collapse), then identity
+  gain vs baseline; saved as `classement.json`. The best checkpoint is often *not* the last.
+
 ### Changed
 - New categories: "Image 2025-2026", "Video 2025-2026", "Legacy". SD 1.5, SD 3.5,
   HunyuanDiT, Sana, Wan 2.1, HunyuanVideo 1, LTX 0.9, CogVideoX, Mochi, Open-Sora moved to Legacy.

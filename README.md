@@ -19,7 +19,7 @@ LoRA-Dataset-Coach is a **complete pipeline** that takes a folder of images and 
 5. **Clean** the dataset (move rejects, recover blurry, deduplicate)
 6. **Generate** masked training masks via BriaRMBG (for OneTrainer masked loss)
 7. **Export** a ready-to-train folder for **30 LoRA targets** (Kohya, ai-toolkit, musubi-tuner, diffusion-pipe, OneTrainer...)
-8. **Evaluate** the finished LoRA post-training with R-FaceSim, Copycat Detector, Black Hole Ranking (MirrorMetrics-inspired)
+8. **Train** it from the app (🏋 Create LoRA: musubi-tuner / ai-toolkit) and **evaluate** every checkpoint with R-FaceSim, Copycat Detector, Black Hole Ranking (MirrorMetrics-inspired)
 
 The whole thing runs in a single Tkinter GUI with a live preview that scrolls through every photo as it's analyzed.
 
@@ -169,6 +169,15 @@ ComfyUI** in the Evaluate tab:
 2. Click **🔄 List** to get the LoRAs ComfyUI sees, choose yours, set the trigger word.
 3. **Generate then evaluate**: N images with the LoRA + the same seeds without it (A/B
    baseline), then R-FaceSim / Copycat / Black Hole and the **identity gain** of the LoRA.
+4. **Batch**: type a common part of the names (e.g. `lin` for `lin-000001` … `lin-000004`)
+   and click **Test the batch and rank** — every checkpoint gets the same prompts and seeds,
+   and you get a ranking to keep the best epoch.
+
+## Create LoRA (🏋 trainer tab)
+Pipeline inside one app: **Analyze → Prepare LoRA → 🏋 Create LoRA → 📊 Evaluate (batch)**.
+The trainer tab launches the musubi-tuner `.bat` or the ai-toolkit YAML produced by Prepare
+LoRA, lets you fix model paths without editing files, shows progress / loss, lists the
+checkpoints, and sends them to ComfyUI for the batch test.
 
 ---
 

@@ -73,6 +73,10 @@ DEFAULT_CONFIG = {
     # ComfyUI local (evaluateur : generation automatique du jeu de test)
     "comfyui_url": "http://127.0.0.1:8188",
     "comfyui_eval_workflow": "",
+    # Createur de LoRA (entrainement) + envoi des checkpoints a ComfyUI
+    "aitoolkit_dir": r"C:\AI\ai-toolkit",
+    "aitoolkit_python": r"C:\AI\ai-toolkit\venv\Scripts\python.exe",
+    "comfyui_loras_dir": r"C:\AI\ComfyUI-future\ComfyUI_windows_portable\ComfyUI\models\loras",
 }
 
 
@@ -184,6 +188,7 @@ class App:
         notebook = self.notebook
 
         self._build_analyzer_tab(notebook)
+        self._build_trainer_tab(notebook)
         self._build_evaluator_tab(notebook)
         self._build_voice_tab(notebook)
         self._build_music_tab(notebook)
@@ -191,9 +196,264 @@ class App:
 
     def select_tab(self, name):
         """Selectionne un tab par nom court."""
-        mapping = {"analyzer": 0, "evaluator": 1, "voice": 2, "music": 3, "config": 4}
+        mapping = {"analyzer": 0, "trainer": 1, "evaluator": 2, "voice": 3, "music": 4, "config": 5}
         if name in mapping:
             self.notebook.select(mapping[name])
+
+    # =========================================================
+    # ONGLET CREER LoRA — lance l'entrainement du dossier prepare
+    # =========================================================
+    def _build_trainer_tab(self, parent):
+        frame = Frame(parent, bg=BG, padx=15, pady=12)
+        parent.add(frame, text="  🏋 Créer LoRA  ")
+        self.train_proc = None
+        self.train_runner = None
+        self.train_vars = {}
+
+        Label(frame, text="Créateur de LoRA", font=FONT_H1, fg=ACCENT2, bg=BG).pack(anchor="w")
+        Label(frame, text="1. Analyse → 🧬 Préparer LoRA   2. Ici : vérifie les chemins, lance "
+                          "l'entraînement, suis la progression   3. Envoie les checkpoints à "
+                          "ComfyUI → test en lot dans 📊 Évaluer : tu gardes la meilleure epoch.",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=BG, wraplength=1000, justify="left").pack(anchor="w", pady=(0, 8))
+
+        row = Frame(frame, bg=CARD, padx=10, pady=8)
+        row.pack(fill="x", pady=3)
+        Label(row, text="📁 Dossier préparé :", font=FONT_BODY, fg=TEXT, bg=CARD).pack(side="left")
+        self.train_folder = StringVar(value="")
+        tk.Entry(row, textvariable=self.train_folder, font=FONT_MONO, bg=BG2, fg=TEXT,
+                 insertbackground=TEXT, relief="flat").pack(side="left", fill="x", expand=True,
+                                                             ipady=5, padx=8)
+
+        def pick():
+            d = filedialog.askdirectory(title="Dossier créé par « Préparer LoRA »")
+            if d:
+                self.train_folder.set(d)
+                self._train_load_folder()
+        make_button(row, "📂", pick).pack(side="left")
+        make_button(row, "↻", self._train_load_folder).pack(side="left", padx=4)
+
+        self.train_info = Label(frame, text="Choisis un dossier préparé.", font=FONT_SMALL,
+                                fg=TEXT_DIM, bg=BG, justify="left", anchor="w", wraplength=1000)
+        self.train_info.pack(fill="x", pady=(2, 4))
+
+        # Chemins editables (lignes "set" du .bat, ou ai-toolkit)
+        self.train_paths_frame = Frame(frame, bg=CARD, padx=10, pady=6)
+        self.train_paths_frame.pack(fill="x", pady=3)
+
+        ctl = Frame(frame, bg=BG)
+        ctl.pack(fill="x", pady=6)
+        self.train_start_btn = Button(ctl, text="🏋 Lancer l'entraînement", font=FONT_H1, bg=GREEN,
+                                      fg=BG, relief="flat", padx=16, pady=6, command=self._train_start)
+        self.train_start_btn.pack(side="left")
+        self.train_stop_btn = Button(ctl, text="⏹ Arrêter", font=FONT_BODY, bg=RED, fg=BG,
+                                     relief="flat", padx=12, pady=6, state="disabled",
+                                     command=self._train_stop)
+        self.train_stop_btn.pack(side="left", padx=8)
+        self.train_send_btn = Button(ctl, text="📤 Checkpoints → ComfyUI → test en lot", font=FONT_BODY,
+                                     bg=ACCENT, fg=BG, relief="flat", padx=12, pady=6,
+                                     command=self._train_send_checkpoints)
+        self.train_send_btn.pack(side="right")
+
+        self.train_status = Label(frame, text="⏸ En attente", font=FONT_BODY, fg=TEXT_DIM, bg=BG,
+                                  anchor="w")
+        self.train_status.pack(fill="x")
+        self.train_progress = ttk.Progressbar(frame, mode="determinate", maximum=100)
+        self.train_progress.pack(fill="x", pady=2)
+
+        body = Frame(frame, bg=BG)
+        body.pack(fill="both", expand=True, pady=4)
+        self.train_log = Text(body, bg=BG2, fg=TEXT, font=FONT_MONO, height=12, relief="flat",
+                              wrap="none")
+        self.train_log.pack(side="left", fill="both", expand=True)
+        right = Frame(body, bg=CARD, padx=8, pady=6, width=300)
+        right.pack(side="right", fill="y", padx=(8, 0))
+        Label(right, text="💾 Checkpoints", font=FONT_BODY, fg=ACCENT, bg=CARD).pack(anchor="w")
+        self.train_ckpt_list = tk.Listbox(right, bg=BG2, fg=TEXT, font=FONT_SMALL, relief="flat",
+                                          width=38, height=12)
+        self.train_ckpt_list.pack(fill="both", expand=True)
+
+    def _train_log_write(self, text):
+        self.train_log.insert("end", text)
+        # Garde le log leger (les tqdm crachent des milliers de lignes)
+        if int(self.train_log.index("end-1c").split(".")[0]) > 3000:
+            self.train_log.delete("1.0", "1000.0")
+        self.train_log.see("end")
+
+    def _train_load_folder(self):
+        import lora_trainer as lt
+        folder = self.train_folder.get().strip()
+        for w in self.train_paths_frame.winfo_children():
+            w.destroy()
+        self.train_vars = {}
+        r = lt.detect_runner(folder) if folder else {"kind": None, "error": "Aucun dossier."}
+        self.train_runner = r
+        if not r.get("kind"):
+            self.train_info.config(text=f"⚠️ {r.get('error')}", fg=YELLOW)
+            self.train_start_btn.config(state="disabled")
+            self._train_refresh_checkpoints()
+            return
+        self.train_start_btn.config(state="normal")
+
+        def field(label, var, row_i, picker=None):
+            Label(self.train_paths_frame, text=label, font=FONT_SMALL, fg=TEXT, bg=CARD,
+                  width=16, anchor="w").grid(row=row_i, column=0, sticky="w")
+            tk.Entry(self.train_paths_frame, textvariable=var, font=FONT_MONO, bg=BG2, fg=TEXT,
+                     insertbackground=TEXT, relief="flat", width=95).grid(row=row_i, column=1,
+                                                                        sticky="we", pady=1)
+            if picker:
+                make_button(self.train_paths_frame, "📂", lambda v=var: picker(v)).grid(row=row_i, column=2)
+
+        if r["kind"] == "bat":
+            vars_ = lt.read_bat_vars(r["file"])
+            for i, (k, v) in enumerate(vars_.items()):
+                var = StringVar(value=v)
+                self.train_vars[k] = var
+                picker = None if k == "MODEL_VERSION" else (
+                    self._pick_folder if k.endswith("_DIR") else self._pick_file)
+                field(k, var, i, picker)
+            self.train_info.config(text=f"✅ musubi-tuner : {r['file'].name} — vérifie les chemins "
+                                        f"ci-dessous (enregistrés dans le .bat au lancement).", fg=GREEN)
+        else:
+            for i, (k, lbl, picker) in enumerate((
+                    ("aitoolkit_dir", "ai-toolkit dir", self._pick_folder),
+                    ("aitoolkit_python", "python ai-toolkit", self._pick_file))):
+                var = StringVar(value=self.cfg.get(k, ""))
+                self.train_vars[k] = var
+                field(lbl, var, i, picker)
+            self.train_info.config(text=f"✅ ai-toolkit : {r['file'].name} — les modèles sont "
+                                        f"téléchargés depuis HuggingFace au 1er lancement.", fg=GREEN)
+        self._train_refresh_checkpoints()
+
+    def _train_start(self):
+        import lora_trainer as lt
+        r = self.train_runner
+        if not r or not r.get("kind"):
+            return
+        if self.train_proc and self.train_proc.poll() is None:
+            messagebox.showwarning("Entraînement", "Un entraînement tourne déjà.")
+            return
+        vals = {k: v.get().strip() for k, v in self.train_vars.items()}
+        if r["kind"] == "bat":
+            missing = lt.check_paths(vals)
+            if missing and not messagebox.askyesno(
+                    "Chemins introuvables",
+                    "Ces fichiers/dossiers n'existent pas :\n" + "\n".join("• " + m for m in missing) +
+                    "\n\nL'entraînement va très probablement échouer. Lancer quand même ?"):
+                return
+            lt.write_bat_vars(r["file"], vals)
+        else:
+            self.cfg.update(vals)
+            try:
+                save_config(self.cfg)
+            except Exception:
+                pass
+        try:
+            cmd, cwd = lt.build_command(r, vals.get("aitoolkit_dir"), vals.get("aitoolkit_python"))
+            self.train_proc = lt.start(cmd, cwd)
+        except Exception as e:
+            messagebox.showerror("Lancement impossible", str(e))
+            return
+        self.train_log.delete("1.0", "end")
+        self._train_log_write(f"$ {' '.join(cmd)}\n   (dans {cwd})\n\n")
+        self.train_start_btn.config(state="disabled")
+        self.train_stop_btn.config(state="normal")
+        self.train_progress.config(value=0)
+        self.train_status.config(text="🏋 Entraînement en cours…", fg=ACCENT)
+        proc = self.train_proc
+
+        def reader():
+            state = {}
+            for line in iter(proc.stdout.readline, ""):
+                # tqdm reecrit sa ligne avec \r : on ne garde que le dernier etat
+                last = line.replace("\r", "\n").rstrip("\n").split("\n")[-1]
+                upd = lt.parse_progress(last)
+                state.update(upd)
+                self.root.after(0, lambda l=last, st=dict(state), u=bool(upd):
+                                self._train_on_line(l, st, u))
+            code = proc.wait()
+            self.root.after(0, lambda: self._train_on_exit(code))
+        threading.Thread(target=reader, daemon=True).start()
+        self._train_poll_checkpoints()
+
+    def _train_on_line(self, line, st, is_progress):
+        if not is_progress or "%|" not in line:
+            self._train_log_write(line + "\n")
+        if "pct" in st:
+            self.train_progress.config(value=st["pct"])
+        parts = []
+        if "epoch" in st:
+            parts.append(f"epoch {st['epoch']}/{st['epochs']}")
+        if "step" in st:
+            parts.append(f"step {st['step']}/{st['total']}")
+        if "loss" in st:
+            parts.append(f"loss {st['loss']:.4f}")
+        if parts:
+            self.train_status.config(text="🏋 " + "  ·  ".join(parts), fg=ACCENT)
+
+    def _train_on_exit(self, code):
+        self.train_start_btn.config(state="normal")
+        self.train_stop_btn.config(state="disabled")
+        self._train_refresh_checkpoints()
+        n = self.train_ckpt_list.size()
+        if code == 0:
+            self.train_progress.config(value=100)
+            self.train_status.config(text=f"✅ Terminé — {n} checkpoint(s). Envoie-les au test en lot.",
+                                     fg=GREEN)
+        else:
+            self.train_status.config(text=f"❌ Arrêt (code {code}) — lis le log ci-dessous "
+                                          f"({n} checkpoint(s) déjà produits)", fg=RED)
+
+    def _train_stop(self):
+        import lora_trainer as lt
+        if self.train_proc and messagebox.askyesno("Arrêter", "Arrêter l'entraînement ? "
+                                                   "Les checkpoints déjà sauvés restent utilisables."):
+            lt.stop(self.train_proc)
+
+    def _train_refresh_checkpoints(self):
+        import lora_trainer as lt
+        self.train_ckpt_list.delete(0, "end")
+        folder = self.train_folder.get().strip()
+        for p in (lt.list_checkpoints(folder) if folder else []):
+            self.train_ckpt_list.insert("end", p.name)
+
+    def _train_poll_checkpoints(self):
+        if self.train_proc and self.train_proc.poll() is None:
+            self._train_refresh_checkpoints()
+            self.root.after(10000, self._train_poll_checkpoints)
+
+    def _train_send_checkpoints(self):
+        import lora_trainer as lt
+        folder = self.train_folder.get().strip()
+        ckpts = lt.list_checkpoints(folder) if folder else []
+        if not ckpts:
+            messagebox.showinfo("Checkpoints", "Aucun checkpoint dans output/ pour l'instant.")
+            return
+        loras_dir = self.cfg.get("comfyui_loras_dir", "")
+        if not Path(loras_dir).is_dir():
+            d = filedialog.askdirectory(title="Dossier ComfyUI/models/loras")
+            if not d:
+                return
+            loras_dir = d
+            self.cfg["comfyui_loras_dir"] = d
+            try:
+                save_config(self.cfg)
+            except Exception:
+                pass
+        run = Path(folder).name
+        try:
+            res = lt.publish_to_comfyui(ckpts, loras_dir, run)
+        except Exception as e:
+            messagebox.showerror("Copie impossible", str(e))
+            return
+        # Bascule vers l'evaluateur, filtre pre-rempli, liste rafraichie
+        self.comfy_batch_filter.set(res["filter"])
+        self._comfy_card_open(True)
+        self.select_tab("evaluator")
+        self._comfy_refresh_loras()
+        messagebox.showinfo("Checkpoints envoyés",
+                            f"{len(res['copied'])} checkpoint(s) copiés dans\n{res['dest']}\n\n"
+                            "Dans 📊 Évaluer : renseigne les photos réelles + le workflow, puis "
+                            "« 📦 Tester le lot et classer ».")
 
     # ------------------ (removed: LoRAs / Outputs / Inputs / Prompt tabs) ------------------
     # ============================================================
@@ -327,6 +587,7 @@ class App:
                           command=lambda: set_open(not opened))
         toggle.pack(fill="x")
         set_open(bool(self.cfg.get("comfyui_eval_workflow")))
+        self._comfy_card_open = set_open
 
         self.comfy_url = StringVar(value=self.cfg.get("comfyui_url", "http://127.0.0.1:8188"))
         self.comfy_wf = StringVar(value=self.cfg.get("comfyui_eval_workflow", ""))
@@ -375,6 +636,19 @@ class App:
                                     bg=ACCENT, fg=BG, relief="flat", padx=10,
                                     command=self._run_comfy_generation)
         self.comfy_gen_btn.pack(side="left", padx=8)
+
+        # Test en LOT : tous les LoRA dont le nom contient le filtre (ex: checkpoints lin_1..4)
+        self.comfy_batch_filter = StringVar(value="")
+        batch = Frame(card, bg=CARD)
+        batch.grid(row=5, column=0, columnspan=6, sticky="w", pady=(4, 0))
+        Label(batch, text="📦 Lot — nom contient :", font=FONT_SMALL, fg=TEXT, bg=CARD).pack(side="left")
+        entry(batch, self.comfy_batch_filter, 22).pack(side="left", padx=(4, 8))
+        self.comfy_batch_btn = Button(batch, text="📦 Tester le lot et classer", font=FONT_BODY,
+                                      bg=ACCENT2, fg=BG, relief="flat", padx=10,
+                                      command=self._run_comfy_batch)
+        self.comfy_batch_btn.pack(side="left")
+        Label(batch, text="  mêmes prompts + mêmes seeds pour tous, baseline commune",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=CARD).pack(side="left")
         Label(card, text="   Workflow : ComfyUI > Workflow > Export (API). Il doit contenir un node "
                          "LoraLoader et un SaveImage ; mets {prompt} dans le texte positif "
                          "(sinon il est détecté via le sampler).",
@@ -400,34 +674,12 @@ class App:
 
     def _run_comfy_generation(self):
         import comfyui_client as cc
-        url = self.comfy_url.get().strip().rstrip("/")
-        wf_path, lora = self.comfy_wf.get().strip(), self.comfy_lora.get().strip()
-        ref = self.eval_ref_path.get()
-        if not Path(wf_path).is_file():
-            messagebox.showerror("Workflow", "Choisis le workflow ComfyUI exporté en format API.")
+        chk = self._comfy_check_inputs(need_lora=True)
+        if not chk:
             return
-        if not lora:
-            messagebox.showerror("LoRA", "Clique « 🔄 Lister » puis choisis le LoRA à évaluer.")
-            return
-        if not Path(ref).is_dir():
-            messagebox.showerror("Référence", "Renseigne d'abord le dossier de photos RÉELLES du sujet.")
-            return
-        # Verification du workflow AVANT de lancer 40 generations
-        try:
-            info = cc.inspect_workflow(cc.load_api_workflow(wf_path))
-        except Exception as e:
-            messagebox.showerror("Workflow invalide", str(e))
-            return
-        if info["problems"]:
-            messagebox.showerror("Workflow inutilisable", "\n".join("• " + p for p in info["problems"]))
-            return
-
-        self.cfg["comfyui_url"], self.cfg["comfyui_eval_workflow"] = url, wf_path
-        try:
-            save_config(self.cfg)
-        except Exception:
-            pass
-        out = Path(self.eval_gen_path.get() or ".") / f"{Path(lora).stem}_{datetime.now():%Y%m%d_%H%M}"
+        url, wf_path = chk
+        lora = self.comfy_lora.get().strip()
+        out = Path(self.eval_gen_path.get() or ".") / f"{cc.safe_dir_name(lora)}_{datetime.now():%Y%m%d_%H%M}"
         self.eval_gen_path.set(str(out))
         n, strength, base = self.comfy_n.get(), self.comfy_strength.get(), self.comfy_baseline.get()
         self.comfy_gen_btn.config(state="disabled")
@@ -459,6 +711,145 @@ class App:
                 self._run_evaluator()
             self.root.after(0, done)
         threading.Thread(target=worker, daemon=True).start()
+
+    def _comfy_check_inputs(self, need_lora=True):
+        """Validation commune generation simple / lot. Renvoie (url, wf_path) ou None."""
+        import comfyui_client as cc
+        url = self.comfy_url.get().strip().rstrip("/")
+        wf_path = self.comfy_wf.get().strip()
+        if not Path(wf_path).is_file():
+            messagebox.showerror("Workflow", "Choisis le workflow ComfyUI exporté en format API.")
+            return None
+        if need_lora and not self.comfy_lora.get().strip():
+            messagebox.showerror("LoRA", "Clique « 🔄 Lister » puis choisis le LoRA à évaluer.")
+            return None
+        if not Path(self.eval_ref_path.get()).is_dir():
+            messagebox.showerror("Référence", "Renseigne d'abord le dossier de photos RÉELLES du sujet.")
+            return None
+        try:
+            info = cc.inspect_workflow(cc.load_api_workflow(wf_path))
+        except Exception as e:
+            messagebox.showerror("Workflow invalide", str(e))
+            return None
+        if info["problems"]:
+            messagebox.showerror("Workflow inutilisable", "\n".join("• " + p for p in info["problems"]))
+            return None
+        self.cfg["comfyui_url"], self.cfg["comfyui_eval_workflow"] = url, wf_path
+        try:
+            save_config(self.cfg)
+        except Exception:
+            pass
+        return url, wf_path
+
+    def _run_comfy_batch(self):
+        import comfyui_client as cc
+        chk = self._comfy_check_inputs(need_lora=False)
+        if not chk:
+            return
+        url, wf_path = chk
+        pattern = self.comfy_batch_filter.get().strip()
+        if not pattern:
+            messagebox.showerror("Lot", "Tape une partie du nom commune aux LoRA à comparer (ex : lin).")
+            return
+        try:
+            loras = cc.filter_loras(cc.list_loras(url), pattern)
+        except Exception as e:
+            messagebox.showerror("ComfyUI", f"ComfyUI injoignable sur {url} :\n{e}")
+            return
+        if len(loras) < 2:
+            messagebox.showerror("Lot", f"{len(loras)} LoRA contient « {pattern} » : il en faut au moins 2 "
+                                        "pour un classement.")
+            return
+        n, base = self.comfy_n.get(), self.comfy_baseline.get()
+        total = n * (len(loras) + (1 if base else 0))
+        if not messagebox.askyesno(
+                "Tester le lot",
+                f"{len(loras)} LoRA :\n" + "\n".join("  • " + l for l in loras[:15]) +
+                ("\n  …" if len(loras) > 15 else "") +
+                f"\n\n{total} générations au total ({n} par LoRA"
+                + (f" + {n} baseline" if base else "") + "). Lancer ?"):
+            return
+        out = Path(self.eval_gen_path.get() or ".") / f"lot_{cc.safe_dir_name(pattern)}_{datetime.now():%Y%m%d_%H%M}"
+        self.comfy_batch_btn.config(state="disabled")
+        self.comfy_gen_btn.config(state="disabled")
+        self.eval_progress.config(mode="determinate", value=0)
+        ref, train = self.eval_ref_path.get(), self.eval_train_path.get().strip()
+
+        def phase(text, pct=None):
+            def f():
+                self.eval_phase.config(text=text, fg=ACCENT)
+                if pct is not None:
+                    self.eval_progress.config(value=pct)
+            self.root.after(0, f)
+
+        def worker():
+            try:
+                r = cc.generate_batch(wf_path, loras, self.comfy_trigger.get().strip() or "ohwx",
+                                      out, n_images=n, strength=self.comfy_strength.get(),
+                                      with_baseline=base, base_url=url,
+                                      progress_cb=lambda c, t, name: phase(
+                                          f"🎨 ComfyUI {c}/{t} — {name}", 70 * c / t))
+                results = {}
+                targets = list(r["folders"].items())
+                if r.get("baseline_folder") and Path(r["baseline_folder"]).is_dir():
+                    targets.append(("_baseline", r["baseline_folder"]))
+                for k, (name, folder) in enumerate(targets, 1):
+                    phase(f"🔬 Évaluation {k}/{len(targets)} — {name}", 70 + 30 * k / len(targets))
+                    results[name] = self._eval_run_once(folder, ref, "" if name == "_baseline" else train)
+                rows = cc.rank_batch(results)
+                (out / "classement.json").write_text(
+                    json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+                self.root.after(0, lambda: self._show_batch_ranking(rows, out, r["errors"]))
+            except Exception as e:
+                self.root.after(0, lambda e=e: self.eval_phase.config(text=f"❌ {e}", fg=RED))
+            finally:
+                self.root.after(0, lambda: (self.comfy_batch_btn.config(state="normal"),
+                                            self.comfy_gen_btn.config(state="normal")))
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_batch_ranking(self, rows, out, errors):
+        self.eval_progress.config(value=100)
+        ok = [r for r in rows if "error" not in r]
+        best = ok[0] if ok else None
+        self.eval_phase.config(
+            text=(f"🏆 Meilleur : {best['lora']} ({best['grade']}, {best['score']}/100)" if best
+                  else "❌ Aucun LoRA évalué"), fg=GREEN if best else RED)
+        win = tk.Toplevel(self.root)
+        win.title("Classement du lot")
+        win.configure(bg=BG)
+        win.geometry("980x460")
+        Label(win, text="🏆 Classement du lot (mêmes prompts, mêmes seeds)", font=FONT_H1,
+              fg=ACCENT2, bg=BG).pack(anchor="w", padx=15, pady=(12, 2))
+        Label(win, text="Tri : note du verdict (pénalise copycat et mode collapse), puis gain "
+                        "d'identité vs baseline sans LoRA. Le « meilleur » n'est pas forcément "
+                        "la dernière epoch : au-delà, le LoRA sur-apprend.",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=BG, wraplength=940, justify="left").pack(anchor="w", padx=15)
+        cols = ("rank", "grade", "score", "rsim", "gain", "std", "copycat")
+        tree = ttk.Treeview(win, columns=cols, show="tree headings", height=14)
+        for c, t, w in (("#0", "LoRA", 360), ("rank", "#", 40), ("grade", "Note", 60),
+                        ("score", "Score", 60), ("rsim", "R-FaceSim", 90), ("gain", "Gain vs base", 100),
+                        ("std", "Écart-type", 90), ("copycat", "Copycat", 70)):
+            tree.heading(c, text=t)
+            tree.column(c, width=w, anchor="w" if c == "#0" else "center")
+        tree.tag_configure("best", foreground=GREEN)
+        tree.tag_configure("bad", foreground=RED)
+        fmt = lambda v, f="{:.3f}": "-" if v is None else f.format(v)
+        for r in rows:
+            if "error" in r:
+                tree.insert("", "end", text=f"  {r['lora']}", values=("", "ERR", "", r["error"][:40], "", "", ""),
+                            tags=("bad",))
+                continue
+            tag = "best" if r is best else ("bad" if r["copycat"] or (r["gain"] is not None and r["gain"] < 0.05) else "")
+            tree.insert("", "end", text=("⭐ " if r is best else "   ") + r["lora"],
+                        values=(r["rank"], r["grade"], r["score"], fmt(r["r_facesim_mean"]),
+                                fmt(r["gain"], "{:+.3f}"), fmt(r["r_facesim_std"]), r["copycat"]),
+                        tags=(tag,))
+        tree.pack(fill="both", expand=True, padx=15, pady=8)
+        foot = f"📁 Images + classement.json : {out}"
+        if errors:
+            foot += f"   ⚠️ {len(errors)} génération(s) en échec (voir classement.json)"
+        Label(win, text=foot, font=FONT_SMALL, fg=TEXT_DIM, bg=BG, wraplength=940,
+              justify="left").pack(anchor="w", padx=15, pady=(0, 10))
 
     def _run_evaluator(self):
         gen = self.eval_gen_path.get()
@@ -2704,10 +3095,10 @@ class App:
             state="normal", bg=GREEN, fg=BG,
             text=f"🧬 Préparer LoRA ({written} OK)"
         )
-        try:
-            os.startfile(str(out_folder))
-        except Exception:
-            pass
+        # Enchaine : le dossier prepare est pre-rempli dans l'onglet Creer LoRA
+        if hasattr(self, "train_folder"):
+            self.train_folder.set(str(out_folder))
+            self._train_load_folder()
         # Ouvre le dossier dans l'explorer
         try:
             os.startfile(str(out_folder))

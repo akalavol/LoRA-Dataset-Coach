@@ -227,57 +227,155 @@ def patch_workflow(wf, prompt, seed, lora_name, strength, prefix):
 # GENERATION DU JEU DE TEST
 # ============================================================
 
-def generate_eval_set(workflow_path, lora_name, trigger, out_folder,
-                      n_images=20, strength=1.0, with_baseline=True,
-                      prompts=None, base_url=DEFAULT_URL, seed0=1000,
-                      progress_cb=None, stop_flag=None):
-    """
-    Genere n_images avec le LoRA dans out_folder/, et si with_baseline les
-    MEMES prompts+seeds avec force 0 dans out_folder/_baseline/.
-    Renvoie {"lora": [...], "baseline": [...], "errors": [...]}.
-    """
-    if not ping(base_url):
-        raise ComfyUIError(f"ComfyUI ne repond pas sur {base_url}. Lance-le d'abord.")
-    wf = load_api_workflow(workflow_path)
-    installed = list_loras(base_url)
-    if lora_name not in installed:
-        raise ComfyUIError(f"LoRA '{lora_name}' absent de ComfyUI/models/loras "
-                           f"({len(installed)} LoRA installes).")
+def natural_key(name):
+    """Tri 'humain' : lin_2 avant lin_10 (les checkpoints d'epoch se trient bien)."""
+    import re
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
 
-    prompts = prompts or DEFAULT_TEST_PROMPTS
-    out_folder = Path(out_folder)
-    out_folder.mkdir(parents=True, exist_ok=True)
-    jobs = []
-    for i in range(n_images):
-        p = prompts[i % len(prompts)].replace("{trigger}", trigger)
-        jobs.append(("lora", i, p, seed0 + i, strength, out_folder))
-        if with_baseline:
-            jobs.append(("baseline", i, p, seed0 + i, 0.0, out_folder / "_baseline"))
 
+def filter_loras(loras, pattern):
+    """LoRA dont le nom contient pattern (insensible a la casse), tri naturel."""
+    # Separateurs normalises : ComfyUI sous Windows renvoie "lora_eval\\run\\x.safetensors"
+    pat = (pattern or "").strip().lower().replace("\\", "/")
+    return sorted((l for l in loras if pat and pat in l.lower().replace("\\", "/")),
+                  key=natural_key)
+
+
+def safe_dir_name(lora_name):
+    return Path(lora_name.replace("\\", "/")).stem.replace(" ", "_")
+
+
+def _run_jobs(wf, jobs, base_url, progress_cb, stop_flag):
+    """jobs : (kind, key, i, prompt, seed, lora_name, strength, dest)."""
     client_id = uuid.uuid4().hex
-    res = {"lora": [], "baseline": [], "errors": [], "prompts": {}}
-    for k, (kind, i, p, seed, s, dest) in enumerate(jobs, 1):
+    res = {"files": {}, "errors": [], "prompts": {}}
+    fails_in_a_row = 0
+    for k, (kind, key, i, p, seed, lora, s, dest) in enumerate(jobs, 1):
         if stop_flag and stop_flag():
             res["errors"].append("arrete par l'utilisateur")
             break
         stem = f"{kind}_{i:03d}_s{seed}"
         if progress_cb:
-            progress_cb(k, len(jobs), stem)
+            progress_cb(k, len(jobs), f"{key} · {stem}")
         try:
-            pid = queue_prompt(base_url, patch_workflow(wf, p, seed, lora_name, s,
-                                                        f"lora_eval/{stem}"), client_id)
+            pid = queue_prompt(base_url, patch_workflow(wf, p, seed, lora, s,
+                                                        f"lora_eval/{safe_dir_name(key)}_{stem}"),
+                               client_id)
             files = download_outputs(base_url, wait_for(base_url, pid), dest, stem)
             if not files:
-                res["errors"].append(f"{stem}: aucune image produite")
-            res[kind].extend(str(f) for f in files)
+                res["errors"].append(f"{key}/{stem}: aucune image produite")
+            res["files"].setdefault(key, []).extend(str(f) for f in files)
             res["prompts"][stem] = p
+            fails_in_a_row = 0
         except ComfyUIError as e:
-            res["errors"].append(f"{stem}: {e}")
-            # Workflow casse = inutile de relancer 40 fois la meme erreur
-            if len(res["errors"]) >= 3 and not res["lora"]:
+            res["errors"].append(f"{key}/{stem}: {e}")
+            fails_in_a_row += 1
+            # Workflow casse = inutile de relancer 200 fois la meme erreur
+            if fails_in_a_row >= 3:
+                res["errors"].append("3 echecs d'affilee : arret")
                 break
-    (out_folder / "eval_prompts.json").write_text(
-        json.dumps({"lora_name": lora_name, "strength": strength, "trigger": trigger,
-                    "prompts": res["prompts"]}, ensure_ascii=False, indent=2),
-        encoding="utf-8")
     return res
+
+
+def _prepare(workflow_path, lora_names, base_url):
+    if not ping(base_url):
+        raise ComfyUIError(f"ComfyUI ne repond pas sur {base_url}. Lance-le d'abord.")
+    wf = load_api_workflow(workflow_path)
+    installed = list_loras(base_url)
+    missing = [l for l in lora_names if l not in installed]
+    if missing:
+        raise ComfyUIError(f"LoRA absent(s) de ComfyUI/models/loras : {', '.join(missing)} "
+                           f"({len(installed)} LoRA installes).")
+    return wf
+
+
+def generate_batch(workflow_path, lora_names, trigger, out_folder,
+                   n_images=20, strength=1.0, with_baseline=True,
+                   prompts=None, base_url=DEFAULT_URL, seed0=1000,
+                   progress_cb=None, stop_flag=None):
+    """
+    Teste un LOT de LoRA (ex: les checkpoints lin_000001..lin_000004) dans les
+    memes conditions : memes prompts, memes seeds. Structure produite :
+        out_folder/<lora>/lora_000_s1000.png ...
+        out_folder/_baseline/baseline_000_s1000.png ...   (une seule fois, partagee)
+    Renvoie {"folders": {lora_name: dossier}, "files": {...}, "errors": [...]}.
+    """
+    lora_names = list(lora_names)
+    if not lora_names:
+        raise ComfyUIError("Aucun LoRA a tester.")
+    wf = _prepare(workflow_path, lora_names, base_url)
+    prompts = prompts or DEFAULT_TEST_PROMPTS
+    out_folder = Path(out_folder)
+    out_folder.mkdir(parents=True, exist_ok=True)
+
+    folders, jobs = {}, []
+    for i in range(n_images):
+        p = prompts[i % len(prompts)].replace("{trigger}", trigger)
+        if with_baseline:
+            # Force 0 = modele de base seul ; le LoRA charge importe peu
+            jobs.append(("baseline", "_baseline", i, p, seed0 + i, lora_names[0], 0.0,
+                         out_folder / "_baseline"))
+    for lora in lora_names:
+        dest = out_folder if len(lora_names) == 1 else out_folder / safe_dir_name(lora)
+        folders[lora] = str(dest)
+        for i in range(n_images):
+            p = prompts[i % len(prompts)].replace("{trigger}", trigger)
+            jobs.append(("lora", lora, i, p, seed0 + i, lora, strength, dest))
+
+    res = _run_jobs(wf, jobs, base_url, progress_cb, stop_flag)
+    res["folders"] = folders
+    res["baseline_folder"] = str(out_folder / "_baseline") if with_baseline else None
+    (out_folder / "eval_prompts.json").write_text(
+        json.dumps({"loras": lora_names, "strength": strength, "trigger": trigger,
+                    "n_images": n_images, "seed0": seed0, "prompts": res["prompts"]},
+                   ensure_ascii=False, indent=2), encoding="utf-8")
+    return res
+
+
+def generate_eval_set(workflow_path, lora_name, trigger, out_folder,
+                      n_images=20, strength=1.0, with_baseline=True,
+                      prompts=None, base_url=DEFAULT_URL, seed0=1000,
+                      progress_cb=None, stop_flag=None):
+    """Un seul LoRA : images dans out_folder/, baseline dans out_folder/_baseline/."""
+    r = generate_batch(workflow_path, [lora_name], trigger, out_folder, n_images, strength,
+                       with_baseline, prompts, base_url, seed0, progress_cb, stop_flag)
+    return {"lora": r["files"].get(lora_name, []),
+            "baseline": r["files"].get("_baseline", []),
+            "errors": r["errors"], "prompts": r["prompts"]}
+
+
+# ============================================================
+# CLASSEMENT D'UN LOT
+# ============================================================
+
+def rank_batch(results):
+    """
+    results : {lora_name: resultat lora_evaluator (dict)} + cle optionnelle
+    "_baseline". Renvoie une liste triee du meilleur au pire.
+    Critere : score du verdict (inclut deja copycat / mode collapse), puis gain
+    d'identite vs baseline. Un LoRA qui copie le dataset ne peut pas gagner.
+    """
+    base = results.get("_baseline", {}).get("summary", {}).get("r_facesim_mean")
+    rows = []
+    for name, r in results.items():
+        if name == "_baseline":
+            continue
+        if "error" in r:
+            rows.append({"lora": name, "error": r["error"], "score": -1})
+            continue
+        s = r.get("summary", {})
+        v = s.get("verdict", {})
+        m = s.get("r_facesim_mean")
+        rows.append({
+            "lora": name,
+            "grade": v.get("grade", "?"),
+            "score": v.get("score", 0),
+            "r_facesim_mean": m,
+            "r_facesim_std": s.get("r_facesim_std"),
+            "copycat": s.get("copycat_count", 0),
+            "gain": round(m - base, 4) if (m is not None and base is not None) else None,
+        })
+    rows.sort(key=lambda r: (r["score"], r.get("gain") or -9), reverse=True)
+    for i, r in enumerate(rows):
+        r["rank"] = i + 1
+    return rows
