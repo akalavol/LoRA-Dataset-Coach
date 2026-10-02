@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [v1.2.0] — 2026-09-28
+
+### Added — 2025-2026 model targets (11 new, 30 total)
+Verified against the musubi-tuner / ai-toolkit source code on 2026-09-28:
+- **Image**: FLUX.2 [dev] and [klein] (ai-toolkit + musubi-tuner), Qwen-Image
+  (musubi + ai-toolkit), Z-Image (musubi + ai-toolkit), Chroma1 Base (ai-toolkit `arch: chroma`).
+- **Video**: Wan 2.2 A14B via ai-toolkit, HunyuanVideo 1.5 (musubi), LTX-2.x (ai-toolkit),
+  MiniMax-H3 image LoRA (musubi, experimental, with de-distillation adapter).
+- Generic `musubi_generic` / `aitoolkit_generic` generators: adding a model is now a
+  catalogue entry, not a new function. musubi exports get a `.bat` that runs
+  latent caching → text-encoder caching → training.
+- Each target carries `notes` + `verified` date, shown in the GUI and README.
+- GUI lists the trendy models that **cannot** be trained from photos (FramePack,
+  Wan 2.5+, Hailuo, HunyuanImage 3.0) and why.
+
+### Added — Evaluator ⇄ local ComfyUI
+- New `comfyui_client.py` (stdlib only) drives a **local ComfyUI** through its HTTP API
+  (`/models/loras`, `/prompt`, `/history`, `/view`).
+- Evaluate tab: collapsible **"Generate test images with ComfyUI"** card. Give your own
+  workflow exported in *API format*, pick the LoRA from the list ComfyUI reports, and the
+  tool patches prompt / seed / LoRA / strength / output prefix, generates N images over
+  10 varied test prompts, then runs the evaluation automatically.
+- **A/B baseline**: the same prompts and seeds with the LoRA at strength 0 go to
+  `_baseline/`. The evaluator scores both and shows the **identity gain**
+  (R-FaceSim with LoRA − without). A gain < 0.05 means the LoRA adds almost nothing.
+- The workflow is checked before the first generation (missing LoRA node, prompt,
+  SaveImage or seed → clear error instead of 40 failed jobs).
+
+### Added — 🏋 "Create LoRA" tab (trainer)
+- New tab between Analyzer and Evaluate: point it at a folder made by **Prepare LoRA**
+  and it detects the runner (`launch_*.bat` → musubi-tuner, `ai_toolkit*.yaml` → ai-toolkit).
+- The `set KEY=...` lines of the musubi `.bat` (MUSUBI_DIR, model paths, MODEL_VERSION)
+  are editable in the GUI, checked for existence, and written back before launch.
+- Live log, progress bar and epoch / step / loss status parsed from tqdm output;
+  **Stop** kills the whole process tree (accelerate sub-processes included).
+- Checkpoints in `output/` are listed live; **Checkpoints → ComfyUI** copies them to
+  `ComfyUI/models/loras/lora_eval/<run>/` and opens the batch test with the filter filled in.
+- Prepare LoRA now pre-fills this tab with the folder it just created.
+- New module `lora_trainer.py` (no Tk dependency).
+
+### Added — 📦 Batch LoRA test (pick the best epoch)
+- Evaluate tab → ComfyUI card: **Test the batch and rank** every LoRA whose name contains a
+  filter (e.g. `lin` → `lin-000001` … `lin-000004`, natural sort). Same prompts, same seeds
+  for all, one shared baseline.
+- Ranking window: verdict score (already penalises copycat / mode collapse), then identity
+  gain vs baseline; saved as `classement.json`. The best checkpoint is often *not* the last.
+
+### Added — 🖼 Quick compare (same prompt, same seed, which LoRA is closest?)
+- **Create LoRA tab**: select several checkpoints (Ctrl/Shift+click), type a prompt and a
+  seed, click **1 image per selected checkpoint**. **Evaluate tab**: **Compare (1 image)**
+  on any finished LoRAs (pre-selected from the batch filter).
+- ComfyUI generates one image per LoRA with the exact same prompt and seed, plus a
+  control image without LoRA. InsightFace measures each face against your **real
+  photos** and the grid shows them side by side with the reference photo, the score,
+  the gain vs the control, and a **⭐ closest** highlight. Saved as `compare.json`.
+- One seed is an indication, not a verdict: the window says so and points to the batch test.
+
+### Changed
+- New categories: "Image 2025-2026", "Video 2025-2026", "Legacy". SD 1.5, SD 3.5,
+  HunyuanDiT, Sana, Wan 2.1, HunyuanVideo 1, LTX 0.9, CogVideoX, Mochi, Open-Sora moved to Legacy.
+- Per-family scoring: 7 families. New "Image 2025-26" family heavily weights long
+  natural captions (WD14 tags are penalised for LLM text encoders); new "Video 2025-26"
+  family has its own criteria instead of "Wan score − 5". Legacy families are never
+  recommended as best target.
+
+### Fixed
+- `wan22_musubi` generated an unusable config: GGUF checkpoint (musubi cannot train GGUF),
+  `--task t2v-14B` (Wan 2.1 task) and a single expert. Now `t2v-A14B` with
+  `--dit` + `--dit_high_noise`, `--timestep_boundary 0.875` and the Wan 2.1 VAE.
+- Evaluate tab: the verdict was packed `before=` the tab frame (managed by the
+  Notebook, not pack) → `TclError`, so the per-image table never filled.
+- Caption editor popup crashed on open (`NameError: ext` on the "Save" button label).
+- Voice / Music / Analyzer error paths crashed instead of showing the error
+  (`lambda` referencing the `except ... as e` variable after Python deleted it).
+- Subject masks were written to `10_<persona>/` regardless of the target's repeats
+  (Pony = 8, FLUX.1 Kohya = 4) and missed the images.
+
+---
+
 ## [v1.1.0] — 2026-06-05
 
 ### Added — Audio dataset analysis (Voice & Music)
