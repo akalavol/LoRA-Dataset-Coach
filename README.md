@@ -173,6 +173,10 @@ ComfyUI** in the Evaluate tab:
    and click **Test the batch and rank** — every checkpoint gets the same prompts and seeds,
    and you get a ranking to keep the best epoch.
 
+5. **Quick compare**: pick 2+ LoRAs (or checkpoints in the Create LoRA tab), one prompt,
+   one seed → one image each, side by side with your reference photo, and the closest
+   one highlighted ⭐.
+
 ## Create LoRA (🏋 trainer tab)
 Pipeline inside one app: **Analyze → Prepare LoRA → 🏋 Create LoRA → 📊 Evaluate (batch)**.
 The trainer tab launches the musubi-tuner `.bat` or the ai-toolkit YAML produced by Prepare

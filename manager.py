@@ -269,8 +269,28 @@ class App:
         right.pack(side="right", fill="y", padx=(8, 0))
         Label(right, text="💾 Checkpoints", font=FONT_BODY, fg=ACCENT, bg=CARD).pack(anchor="w")
         self.train_ckpt_list = tk.Listbox(right, bg=BG2, fg=TEXT, font=FONT_SMALL, relief="flat",
-                                          width=38, height=12)
+                                          width=38, height=9, selectmode="extended",
+                                          exportselection=False)
         self.train_ckpt_list.pack(fill="both", expand=True)
+        Label(right, text="Ctrl/Maj+clic : sélection multiple", font=FONT_SMALL,
+              fg=TEXT_DIM, bg=CARD).pack(anchor="w")
+
+        # Comparaison rapide : meme prompt + meme seed, 1 image par checkpoint selectionne
+        # (vars partagees avec l'onglet Evaluer, construit apres)
+        self.cmp_prompt = StringVar(value="close-up portrait photo of {trigger}, natural light, sharp focus")
+        self.cmp_seed = tk.IntVar(value=1234)
+        Label(right, text="🖼 Comparaison rapide", font=FONT_BODY, fg=ACCENT, bg=CARD).pack(anchor="w", pady=(6, 0))
+        tk.Entry(right, textvariable=self.cmp_prompt, font=FONT_SMALL, bg=BG2, fg=TEXT,
+                 insertbackground=TEXT, relief="flat").pack(fill="x", pady=2)
+        seed_row = Frame(right, bg=CARD)
+        seed_row.pack(fill="x")
+        Label(seed_row, text="Seed :", font=FONT_SMALL, fg=TEXT, bg=CARD).pack(side="left")
+        tk.Entry(seed_row, textvariable=self.cmp_seed, font=FONT_SMALL, width=10, bg=BG2, fg=TEXT,
+                 insertbackground=TEXT, relief="flat").pack(side="left", padx=4)
+        self.train_cmp_btn = Button(right, text="🖼 1 image par checkpoint sélectionné", font=FONT_SMALL,
+                                    bg=ACCENT2, fg=BG, relief="flat", pady=4,
+                                    command=self._train_quick_compare)
+        self.train_cmp_btn.pack(fill="x", pady=(4, 0))
 
     def _train_log_write(self, text):
         self.train_log.insert("end", text)
@@ -454,6 +474,207 @@ class App:
                             f"{len(res['copied'])} checkpoint(s) copiés dans\n{res['dest']}\n\n"
                             "Dans 📊 Évaluer : renseigne les photos réelles + le workflow, puis "
                             "« 📦 Tester le lot et classer ».")
+
+    # =========================================================
+    # COMPARAISON RAPIDE (Creer LoRA + Evaluer) : meme prompt, meme seed,
+    # 1 image par LoRA, le plus proche des photos reelles est designe
+    # =========================================================
+    def _ensure_comfy_settings(self):
+        """Demande ce qui manque (workflow API, photos reelles) puis valide."""
+        if not Path(self.comfy_wf.get().strip()).is_file():
+            f = filedialog.askopenfilename(title="Workflow ComfyUI exporté en format API",
+                                           filetypes=[("Workflow API", "*.json")])
+            if not f:
+                return None
+            self.comfy_wf.set(f)
+        if not Path(self.eval_ref_path.get().strip()).is_dir():
+            d = filedialog.askdirectory(title="Dossier de photos RÉELLES du sujet (≠ entraînement)")
+            if not d:
+                return None
+            self.eval_ref_path.set(d)
+        return self._comfy_check_inputs(need_lora=False)
+
+    def _train_quick_compare(self):
+        import comfyui_client as cc
+        import lora_trainer as lt
+        folder = self.train_folder.get().strip()
+        ckpts = lt.list_checkpoints(folder) if folder else []
+        sel = [ckpts[i] for i in self.train_ckpt_list.curselection() if i < len(ckpts)]
+        if len(sel) < 2:
+            messagebox.showinfo("Comparaison", "Sélectionne au moins 2 checkpoints dans la liste "
+                                               "(Ctrl+clic ou Maj+clic).")
+            return
+        chk = self._ensure_comfy_settings()
+        if not chk:
+            return
+        url, _ = chk
+        loras_dir = self.cfg.get("comfyui_loras_dir", "")
+        if not Path(loras_dir).is_dir():
+            loras_dir = filedialog.askdirectory(title="Dossier ComfyUI/models/loras")
+            if not loras_dir:
+                return
+            self.cfg["comfyui_loras_dir"] = loras_dir
+        try:
+            pub = lt.publish_to_comfyui(sel, loras_dir, Path(folder).name)
+            installed = cc.filter_loras(cc.list_loras(url), pub["filter"])
+        except Exception as e:
+            messagebox.showerror("ComfyUI", str(e))
+            return
+        wanted = {p.name for p in sel}
+        names = [l for l in installed if Path(l.replace("\\", "/")).name in wanted]
+        if len(names) != len(sel):
+            messagebox.showerror("ComfyUI", f"ComfyUI ne voit que {len(names)}/{len(sel)} checkpoints "
+                                            f"dans {pub['dest']}. Vérifie le dossier models/loras.")
+            return
+        self._quick_compare(names, self.train_status)
+
+    def _eval_quick_compare(self):
+        import comfyui_client as cc
+        chk = self._ensure_comfy_settings()
+        if not chk:
+            return
+        url, _ = chk
+        try:
+            loras = cc.list_loras(url)
+        except Exception as e:
+            messagebox.showerror("ComfyUI", f"ComfyUI injoignable sur {url} :\n{e}")
+            return
+        pat = self.comfy_batch_filter.get().strip()
+        if pat:
+            loras = cc.filter_loras(loras, pat)
+        # Choix des LoRA (pre-selection : ceux du filtre)
+        dlg = tk.Toplevel(self.root)
+        dlg.title("LoRA à comparer")
+        dlg.configure(bg=BG)
+        dlg.geometry("520x460")
+        Label(dlg, text="Sélectionne les LoRA à comparer (Ctrl/Maj+clic)", font=FONT_BODY,
+              fg=TEXT, bg=BG).pack(anchor="w", padx=12, pady=(10, 4))
+        lb = tk.Listbox(dlg, selectmode="extended", bg=BG2, fg=TEXT, font=FONT_SMALL,
+                        relief="flat", exportselection=False)
+        for l in loras:
+            lb.insert("end", l)
+        if pat:
+            lb.select_set(0, "end")
+        lb.pack(fill="both", expand=True, padx=12)
+
+        def go():
+            names = [loras[i] for i in lb.curselection()]
+            if len(names) < 2:
+                messagebox.showinfo("Comparaison", "Choisis au moins 2 LoRA.", parent=dlg)
+                return
+            dlg.destroy()
+            self._quick_compare(names, self.eval_phase)
+        Button(dlg, text="🖼 Générer 1 image chacun", font=FONT_BODY, bg=ACCENT2, fg=BG,
+               relief="flat", padx=12, pady=6, command=go).pack(pady=10)
+
+    def _quick_compare(self, lora_names, status_label):
+        """Genere 1 image par LoRA (meme prompt + seed) + temoin sans LoRA,
+        mesure la ressemblance aux photos reelles, affiche la grille."""
+        import comfyui_client as cc
+        url = self.comfy_url.get().strip().rstrip("/")
+        wf_path, ref = self.comfy_wf.get().strip(), self.eval_ref_path.get().strip()
+        trigger = self.comfy_trigger.get().strip() or "ohwx"
+        prompt = self.cmp_prompt.get().strip().replace("{trigger}", trigger) or trigger
+        try:
+            seed = int(self.cmp_seed.get())
+        except Exception:
+            seed = 1234
+        strength = self.comfy_strength.get()
+        base_dir = Path(self.eval_gen_path.get() or Path(wf_path).parent)
+        out = base_dir / f"compare_{datetime.now():%Y%m%d_%H%M%S}"
+        btns = [self.train_cmp_btn, self.comfy_cmp_btn]
+        for b in btns:
+            b.config(state="disabled")
+
+        def say(text, color=ACCENT):
+            self.root.after(0, lambda: status_label.config(text=text, fg=color))
+
+        def worker():
+            try:
+                r = cc.generate_compare(wf_path, lora_names, prompt, seed, out, strength=strength,
+                                        base_url=url,
+                                        progress_cb=lambda c, t, n: say(f"🖼 ComfyUI {c}/{t} — {n}"))
+                if not r["images"]:
+                    say("❌ Aucune image : " + " | ".join(r["errors"][:2]), RED)
+                    return
+                say("🔬 Mesure de la ressemblance aux photos réelles…")
+                ev = self._eval_run_once(str(out), ref, "")
+                bev = (self._eval_run_once(str(out / "_baseline"), ref, "")
+                       if r["baseline"] else None)
+                if "error" in ev:
+                    say(f"❌ Évaluateur : {ev['error']}", RED)
+                    return
+                rows, base = cc.closest_lora(r["images"], ev,
+                                             bev if bev and "error" not in bev else None)
+                best = rows[0] if rows and rows[0]["sim"] is not None else None
+                say((f"⭐ Le plus proche : {Path(best['lora'].replace(chr(92), '/')).name} "
+                     f"({best['sim']:.3f})") if best else "⚠️ Aucun visage détecté",
+                    GREEN if best else YELLOW)
+                self.root.after(0, lambda: self._show_compare_window(
+                    rows, base, r["baseline"], ref, prompt, seed, out, r["errors"]))
+            except Exception as e:
+                say(f"❌ {e}", RED)
+            finally:
+                self.root.after(0, lambda: [b.config(state="normal") for b in btns])
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_compare_window(self, rows, base_sim, base_img, ref_folder, prompt, seed, out, errors):
+        win = tk.Toplevel(self.root)
+        win.title("Comparaison rapide — même prompt, même seed")
+        win.configure(bg=BG)
+        Label(win, text=f"🖼 « {prompt} »  ·  seed {seed}", font=FONT_H1, fg=ACCENT2, bg=BG,
+              wraplength=1100, justify="left").pack(anchor="w", padx=12, pady=(10, 0))
+        Label(win, text="Ressemblance = similarité du visage (InsightFace) avec tes photos RÉELLES. "
+                        "1 seed = indication rapide ; pour décider d'une epoch, utilise le test en lot.",
+              font=FONT_SMALL, fg=TEXT_DIM, bg=BG, wraplength=1100, justify="left").pack(anchor="w", padx=12)
+        grid = Frame(win, bg=BG)
+        grid.pack(padx=12, pady=10)
+        win._photos = []  # garde les references (sinon Tk efface les images)
+        best = rows[0] if rows and rows[0]["sim"] is not None else None
+        exts = (".png", ".jpg", ".jpeg", ".webp")
+        ref_img = next((p for p in sorted(Path(ref_folder).iterdir())
+                        if p.suffix.lower() in exts), None) if Path(ref_folder).is_dir() else None
+
+        cells = []
+        if ref_img:
+            cells.append(("📸 Référence réelle", str(ref_img), "", TEXT_DIM, False))
+        if base_img:
+            cells.append(("Sans LoRA (témoin)", base_img,
+                          f"{base_sim:.3f}" if base_sim is not None else "pas de visage", TEXT_DIM, False))
+        for r in rows:
+            name = Path(r["lora"].replace("\\", "/")).name
+            if r["sim"] is None:
+                txt, col = "❌ visage non détecté", RED
+            else:
+                gain = f"  ({r['sim'] - base_sim:+.3f} vs témoin)" if base_sim is not None else ""
+                txt, col = f"{r['sim']:.3f}{gain}", (GREEN if r is best else TEXT)
+            cells.append((("⭐ LE PLUS PROCHE\n" if r is best else "") + name, r["image"], txt, col, r is best))
+
+        # Jusqu'a 8 cases (= 6 LoRA) : 4 par ligne en 240 px ; au-dela, plus petit
+        per_row, thumb = (4, 240) if len(cells) <= 8 else (6, 170)
+        for i, (title, img_path, score, col, is_best) in enumerate(cells):
+            cell = Frame(grid, bg=GREEN if is_best else CARD, padx=3, pady=3)
+            cell.grid(row=i // per_row, column=i % per_row, padx=6, pady=6, sticky="n")
+            inner = Frame(cell, bg=CARD, padx=6, pady=6)
+            inner.pack()
+            if _HAS_PIL:
+                try:
+                    pil = PILImage.open(img_path)
+                    pil.thumbnail((thumb, thumb))
+                    ph = PILImageTk.PhotoImage(pil)
+                    win._photos.append(ph)
+                    Label(inner, image=ph, bg=CARD).pack()
+                except Exception:
+                    Label(inner, text="(image illisible)", fg=RED, bg=CARD, width=30, height=10).pack()
+            Label(inner, text=title, font=FONT_SMALL, fg=GREEN if is_best else TEXT, bg=CARD,
+                  wraplength=thumb, justify="center").pack(pady=(4, 0))
+            if score:
+                Label(inner, text=score, font=FONT_BODY, fg=col, bg=CARD).pack()
+        foot = f"📁 {out}"
+        if errors:
+            foot += f"   ⚠️ {len(errors)} génération(s) en échec : " + " | ".join(errors[:2])
+        Label(win, text=foot, font=FONT_SMALL, fg=TEXT_DIM, bg=BG, wraplength=1100,
+              justify="left").pack(anchor="w", padx=12, pady=(0, 10))
 
     # ------------------ (removed: LoRAs / Outputs / Inputs / Prompt tabs) ------------------
     # ============================================================
@@ -647,6 +868,10 @@ class App:
                                       bg=ACCENT2, fg=BG, relief="flat", padx=10,
                                       command=self._run_comfy_batch)
         self.comfy_batch_btn.pack(side="left")
+        self.comfy_cmp_btn = Button(batch, text="🖼 Comparer (1 image)", font=FONT_BODY,
+                                    bg=CARD_HI, fg=TEXT, relief="flat", padx=8,
+                                    command=self._eval_quick_compare)
+        self.comfy_cmp_btn.pack(side="left", padx=6)
         Label(batch, text="  mêmes prompts + mêmes seeds pour tous, baseline commune",
               font=FONT_SMALL, fg=TEXT_DIM, bg=CARD).pack(side="left")
         Label(card, text="   Workflow : ComfyUI > Workflow > Export (API). Il doit contenir un node "

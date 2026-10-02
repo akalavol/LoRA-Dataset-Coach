@@ -54,6 +54,16 @@ Verified against the musubi-tuner / ai-toolkit source code on 2026-09-28:
 - Ranking window: verdict score (already penalises copycat / mode collapse), then identity
   gain vs baseline; saved as `classement.json`. The best checkpoint is often *not* the last.
 
+### Added — 🖼 Quick compare (same prompt, same seed, which LoRA is closest?)
+- **Create LoRA tab**: select several checkpoints (Ctrl/Shift+click), type a prompt and a
+  seed, click **1 image per selected checkpoint**. **Evaluate tab**: **Compare (1 image)**
+  on any finished LoRAs (pre-selected from the batch filter).
+- ComfyUI generates one image per LoRA with the exact same prompt and seed, plus a
+  control image without LoRA. InsightFace measures each face against your **real
+  photos** and the grid shows them side by side with the reference photo, the score,
+  the gain vs the control, and a **⭐ closest** highlight. Saved as `compare.json`.
+- One seed is an indication, not a verdict: the window says so and points to the batch test.
+
 ### Changed
 - New categories: "Image 2025-2026", "Video 2025-2026", "Legacy". SD 1.5, SD 3.5,
   HunyuanDiT, Sana, Wan 2.1, HunyuanVideo 1, LTX 0.9, CogVideoX, Mochi, Open-Sora moved to Legacy.

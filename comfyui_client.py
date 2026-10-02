@@ -379,3 +379,57 @@ def rank_batch(results):
     for i, r in enumerate(rows):
         r["rank"] = i + 1
     return rows
+
+
+# ============================================================
+# COMPARAISON RAPIDE : 1 prompt, 1 seed, 1 image par LoRA
+# ============================================================
+
+def generate_compare(workflow_path, lora_names, prompt, seed, out_folder,
+                     strength=1.0, with_baseline=True, base_url=DEFAULT_URL,
+                     progress_cb=None, stop_flag=None):
+    """
+    Meme prompt + meme seed pour chaque LoRA : seule difference = le LoRA.
+    Renvoie {"images": {lora_name: chemin}, "baseline": chemin|None, "errors": [...]}.
+    Les fichiers sont nommes NN_<lora>.png pour etre relies au resultat de
+    l'evaluateur (qui indexe par nom de fichier).
+    """
+    lora_names = list(lora_names)
+    if not lora_names:
+        raise ComfyUIError("Aucun LoRA selectionne.")
+    wf = _prepare(workflow_path, lora_names, base_url)
+    out_folder = Path(out_folder)
+    out_folder.mkdir(parents=True, exist_ok=True)
+    jobs = [(f"{k:02d}_{safe_dir_name(l)}", l, 0, prompt, seed, l, strength, out_folder)
+            for k, l in enumerate(lora_names, 1)]
+    if with_baseline:
+        # A part : sinon le visage du modele de base pourrait etre "le plus proche"
+        jobs.append(("00_sans_lora", "_baseline", 0, prompt, seed, lora_names[0], 0.0,
+                     out_folder / "_baseline"))
+    res = _run_jobs(wf, jobs, base_url, progress_cb, stop_flag)
+    images = {l: res["files"][l][0] for l in lora_names if res["files"].get(l)}
+    base = res["files"].get("_baseline", [None])[0]
+    (out_folder / "compare.json").write_text(
+        json.dumps({"prompt": prompt, "seed": seed, "strength": strength,
+                    "images": images, "baseline": base}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    return {"images": images, "baseline": base, "errors": res["errors"]}
+
+
+def closest_lora(images, eval_result, baseline_eval=None):
+    """
+    Relie les scores R-FaceSim de l'evaluateur (par nom de fichier) a chaque LoRA.
+    Renvoie (lignes triees du plus proche au moins proche, score baseline).
+    """
+    by_name = {e.get("name"): e for e in (eval_result or {}).get("per_image", [])}
+    rows = []
+    for lora, path in images.items():
+        e = by_name.get(Path(path).name, {})
+        rows.append({"lora": lora, "image": path, "has_face": bool(e.get("has_face")),
+                     "sim": e.get("r_facesim"), "sim_max": e.get("r_facesim_max")})
+    rows.sort(key=lambda r: (r["sim"] is not None, r["sim"] or 0), reverse=True)
+    base = None
+    if baseline_eval:
+        b = (baseline_eval.get("per_image") or [{}])[0]
+        base = b.get("r_facesim")
+    return rows, base
