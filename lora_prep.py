@@ -43,7 +43,7 @@ TARGETS = {
         "trainer_doc_url": "https://github.com/bmaltais/kohya_ss",
     },
     "sd15_kohya": {
-        "label": "SD 1.5 (Kohya SS GUI)",
+        "label": "SD 1.5 (Kohya SS GUI) — legacy",
         "base_model": "v1-5-pruned-emaonly.safetensors",
         "resolutions": [(512, 512)],
         "crop_strategy": "square_face",
@@ -56,9 +56,10 @@ TARGETS = {
         "network_alpha": 8,
         "learning_rate": 1e-4,
         "trainer_doc_url": "https://github.com/bmaltais/kohya_ss",
+        "category": "legacy",
     },
     "flux_aitoolkit": {
-        "label": "Flux (ai-toolkit / ostris)",
+        "label": "FLUX.1 dev (ai-toolkit / ostris)",
         "base_model": "flux1-dev-Q8_0.gguf",
         "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],  # buckets ratio libres
         "crop_strategy": "bucket_face",        # garde des ratios variés
@@ -73,7 +74,7 @@ TARGETS = {
         "trainer_doc_url": "https://github.com/ostris/ai-toolkit",
     },
     "flux_kohya": {
-        "label": "Flux (Kohya, branche sd3)",
+        "label": "FLUX.1 dev (Kohya, branche sd3)",
         "base_model": "flux1-dev-Q8_0.gguf",
         "resolutions": [(1024, 1024)],
         "crop_strategy": "square_face",
@@ -86,24 +87,6 @@ TARGETS = {
         "network_alpha": 16,
         "learning_rate": 5e-5,
         "trainer_doc_url": "https://github.com/bmaltais/kohya_ss",
-    },
-    "wan22_musubi": {
-        "label": "Wan 2.2 vidéo (musubi-tuner)",
-        "base_model": "Wan2.2-I2V-A14B-HighNoise-Q8_0.gguf",
-        # Wan I2V/T2V utilise des ratios vidéo. Pour un LoRA persona on peut
-        # garder du carré 720x720, mais buckets 832x480 (paysage) + 480x832
-        # (portrait) couvrent mieux les usages réels.
-        "resolutions": [(720, 720), (832, 480), (480, 832)],
-        "crop_strategy": "bucket_face",
-        "captioner": "natural",                # Wan T5 = langage naturel
-        "config_format": "musubi_toml",
-        "folder_naming": "flat",
-        "default_repeats": None,
-        "default_epochs": 16,
-        "network_dim": 32,
-        "network_alpha": 32,
-        "learning_rate": 2e-4,
-        "trainer_doc_url": "https://github.com/kohya-ss/musubi-tuner",
     },
     "hunyuan_diffpipe": {
         "label": "HunyuanVideo (diffusion-pipe)",
@@ -119,6 +102,7 @@ TARGETS = {
         "network_alpha": 32,
         "learning_rate": 5e-4,
         "trainer_doc_url": "https://github.com/tdrussell/diffusion-pipe",
+        "category": "legacy",
     },
     "onetrainer_sdxl": {
         "label": "SDXL (OneTrainer)",
@@ -208,7 +192,7 @@ TARGETS = {
         "network_dim": 16,
         "network_alpha": 16,
         "learning_rate": 4e-5,
-        "category": "image_photo",
+        "category": "legacy",
         "trainer_doc_url": "https://github.com/bmaltais/kohya_ss",
     },
     "hunyuan_dit_kohya": {
@@ -224,7 +208,7 @@ TARGETS = {
         "network_dim": 16,
         "network_alpha": 16,
         "learning_rate": 1e-4,
-        "category": "image_photo",
+        "category": "legacy",
         "trainer_doc_url": "https://github.com/Tencent/HunyuanDiT",
     },
     "sana_diffpipe": {
@@ -240,28 +224,356 @@ TARGETS = {
         "network_dim": 16,
         "network_alpha": 16,
         "learning_rate": 1e-4,
-        "category": "image_photo",
+        "category": "legacy",
         "trainer_doc_url": "https://github.com/tdrussell/diffusion-pipe",
     },
-    "chroma_aitoolkit": {
-        "label": "Chroma (Flux variant) ai-toolkit",
-        "base_model": "chroma-unlocked-v37.safetensors",
+
+    # ===========================================================
+    # GENERATION 2025-2026 (verifie le 2026-09-28 dans le code source
+    # de musubi-tuner / ai-toolkit, voir "source" de chaque target).
+    # Tous ces modeles ont un encodeur texte LLM/VLM -> captions en
+    # langage naturel detaille, JAMAIS de tags booru.
+    # ===========================================================
+    "flux2_dev_aitoolkit": {
+        "label": "FLUX.2 [dev] 32B (ai-toolkit)",
+        "base_model": "black-forest-labs/FLUX.2-dev",
         "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],
         "crop_strategy": "bucket_face",
         "captioner": "natural",
-        "config_format": "aitoolkit_yaml_chroma",
+        "config_format": "aitoolkit_generic",
+        "aitoolkit": {"arch": "flux2", "quantize": True, "low_vram": True},
+        "folder_naming": "flat",
+        "default_repeats": None,
+        "default_epochs": 12,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 1e-4,
+        "category": "image_modern",
+        "notes": "Licence FLUX.2-dev Non-Commercial. Encodeur texte Mistral Small 3.2 24B : "
+                 "tres gourmand en VRAM (quantize obligatoire sous 48 Go).",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/ostris/ai-toolkit",
+    },
+    "flux2_klein_aitoolkit": {
+        "label": "FLUX.2 [klein] 9B base (ai-toolkit)",
+        "base_model": "black-forest-labs/FLUX.2-klein-base-9B",
+        "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "aitoolkit_generic",
+        "aitoolkit": {"arch": "flux2_klein_9b", "quantize": True, "low_vram": False},
+        "folder_naming": "flat",
+        "default_repeats": None,
+        "default_epochs": 12,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 1e-4,
+        "category": "image_modern",
+        "notes": "Entraine sur la version BASE (non distillee) ; le LoRA s'applique ensuite a klein 9B. "
+                 "Pour klein 4B : remplace arch par flux2_klein_4b et le repo par FLUX.2-klein-base-4B.",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/ostris/ai-toolkit",
+    },
+    "flux2_musubi": {
+        "label": "FLUX.2 dev / klein (musubi-tuner)",
+        "base_model": "flux2-dev.safetensors",
+        "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "musubi_generic",
+        "musubi": {
+            "prefix": "flux_2",
+            "paths": {"DIT": "flux2-dev.safetensors", "VAE": "flux2-vae.safetensors",
+                      "TE": "mistral_3_small_flux2.safetensors"},
+            "model_version": "dev",
+            "latents_args": '--vae "%VAE%" --model_version %MODEL_VERSION%',
+            "te_args": '--text_encoder "%TE%" --batch_size 16 --model_version %MODEL_VERSION%',
+            "train_args": ('--model_version %MODEL_VERSION% --dit "%DIT%" --vae "%VAE%" '
+                           '--text_encoder "%TE%" --timestep_sampling flux2_shift --weighting_scheme none'),
+            "network_module": "networks.lora_flux_2",
+        },
+        "folder_naming": "flat",
+        "default_repeats": 1,
+        "default_epochs": 16,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 1e-4,
+        "category": "image_modern",
+        "notes": "MODEL_VERSION : dev | klein-base-4b | klein-base-9b (entraine sur les 'base', "
+                 "pas sur les klein distilles). Klein : encodeur Qwen3-4B / Qwen3-8B.",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/kohya-ss/musubi-tuner/blob/main/docs/flux_2.md",
+    },
+    "qwen_image_musubi": {
+        "label": "Qwen-Image (musubi-tuner)",
+        "base_model": "qwen_image_bf16.safetensors",
+        "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "musubi_generic",
+        "musubi": {
+            "prefix": "qwen_image",
+            "paths": {"DIT": "qwen_image_bf16.safetensors", "VAE": "qwen_image_vae.safetensors",
+                      "TE": "qwen_2.5_vl_7b.safetensors"},
+            "model_version": "original",
+            "latents_args": '--vae "%VAE%" --model_version %MODEL_VERSION%',
+            "te_args": '--text_encoder "%TE%" --batch_size 1 --model_version %MODEL_VERSION%',
+            "train_args": ('--dit "%DIT%" --vae "%VAE%" --text_encoder "%TE%" '
+                           '--model_version %MODEL_VERSION% --timestep_sampling shift '
+                           '--weighting_scheme none --discrete_flow_shift 2.2'),
+            "network_module": "networks.lora_qwen_image",
+        },
+        "folder_naming": "flat",
+        "default_repeats": 1,
+        "default_epochs": 16,
+        "network_dim": 16,
+        "network_alpha": 16,
+        "learning_rate": 5e-5,
+        "category": "image_modern",
+        "notes": "Encodeur Qwen2.5-VL 7B. Les variantes Edit (edit-2509 / edit-2511) exigent des "
+                 "images de controle : ce dataset photo seul ne sert qu'a 'original'.",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/kohya-ss/musubi-tuner/blob/main/docs/qwen_image.md",
+    },
+    "qwen_image_aitoolkit": {
+        "label": "Qwen-Image (ai-toolkit)",
+        "base_model": "Qwen/Qwen-Image",
+        "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "aitoolkit_generic",
+        "aitoolkit": {"arch": "qwen_image", "quantize": True, "low_vram": True},
+        "folder_naming": "flat",
+        "default_repeats": None,
+        "default_epochs": 12,
+        "network_dim": 16,
+        "network_alpha": 16,
+        "learning_rate": 1e-4,
+        "category": "image_modern",
+        "notes": "Pour Qwen-Image 2.x : arch qwen_image_2 + repo Qwen/Qwen-Image-2.1.",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/ostris/ai-toolkit",
+    },
+    "zimage_musubi": {
+        "label": "Z-Image Base 6B (musubi-tuner)",
+        "base_model": "z_image_bf16.safetensors",
+        "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "musubi_generic",
+        "musubi": {
+            "prefix": "zimage",
+            "paths": {"DIT": "z_image_bf16.safetensors", "VAE": "ae.safetensors",
+                      "TE": "qwen_3_4b.safetensors"},
+            "latents_args": '--vae "%VAE%"',
+            "te_args": '--text_encoder "%TE%" --batch_size 16',
+            "train_args": ('--dit "%DIT%" --vae "%VAE%" --text_encoder "%TE%" '
+                           '--timestep_sampling shift --weighting_scheme none --discrete_flow_shift 2.0'),
+            "network_module": "networks.lora_zimage",
+        },
+        "folder_naming": "flat",
+        "default_repeats": 1,
+        "default_epochs": 16,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 1e-4,
+        "category": "image_modern",
+        "notes": "Entraine sur Z-Image BASE. Sur Turbo l'entrainement est instable : "
+                 "utilise ostris/Z-Image-De-Turbo ou --base_weights zimage_turbo_training_adapter.",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/kohya-ss/musubi-tuner/blob/main/docs/zimage.md",
+    },
+    "zimage_aitoolkit": {
+        "label": "Z-Image (ai-toolkit)",
+        "base_model": "Tongyi-MAI/Z-Image",
+        "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "aitoolkit_generic",
+        "aitoolkit": {"arch": "zimage", "quantize": True, "low_vram": False},
+        "folder_naming": "flat",
+        "default_repeats": None,
+        "default_epochs": 12,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 1e-4,
+        "category": "image_modern",
+        "notes": "Base recommandee. Pour Turbo, passe par l'adaptateur d'entrainement d'ostris (UI ai-toolkit).",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/ostris/ai-toolkit",
+    },
+    "chroma_aitoolkit": {
+        "label": "Chroma1 Base (ai-toolkit)",
+        "base_model": "lodestones/Chroma1-Base",
+        "resolutions": [(1024, 1024), (1024, 768), (768, 1024)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "aitoolkit_generic",
+        "aitoolkit": {"arch": "chroma", "quantize": True, "low_vram": False},
         "folder_naming": "flat",
         "default_repeats": None,
         "default_epochs": 10,
         "network_dim": 16,
         "network_alpha": 16,
-        "learning_rate": 3e-4,
-        "category": "image_photo",
+        "learning_rate": 1e-4,
+        "category": "image_modern",
+        "verified": "2026-09-28",
         "trainer_doc_url": "https://github.com/ostris/ai-toolkit",
     },
 
+    # ----- VIDEO 2025-2026 -----
+    # Un dataset PHOTO n'apprend que l'APPARENCE (identite, style) a un modele
+    # video. Le mouvement propre au sujet exige des clips.
+    "wan22_musubi": {
+        "label": "Wan 2.2 A14B T2V high+low (musubi-tuner)",
+        "base_model": "wan2.2_t2v_low_noise_14B_fp16.safetensors",
+        # Buckets officiels Wan 2.2 A14B : 832x480 / 480x832 (+720p)
+        "resolutions": [(832, 480), (480, 832), (624, 624)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "musubi_generic",
+        "musubi": {
+            "prefix": "wan",
+            "paths": {"DIT": "wan2.2_t2v_low_noise_14B_fp16.safetensors",
+                      "DIT_HIGH": "wan2.2_t2v_high_noise_14B_fp16.safetensors",
+                      "VAE": "wan_2.1_vae.safetensors",
+                      "T5": "models_t5_umt5-xxl-enc-bf16.pth"},
+            "latents_args": '--vae "%VAE%"',
+            "te_args": '--t5 "%T5%" --batch_size 16',
+            "train_args": ('--task t2v-A14B --dit "%DIT%" --dit_high_noise "%DIT_HIGH%" '
+                           '--timestep_boundary 0.875 --fp8_base --offload_inactive_dit '
+                           '--timestep_sampling shift --discrete_flow_shift 3.0'),
+            "network_module": "networks.lora_wan",
+        },
+        "folder_naming": "flat",
+        "default_repeats": 1,
+        "default_epochs": 16,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 2e-4,
+        "category": "video",
+        "notes": "VAE = Wan 2.1 VAE (le Wan2.2_VAE est reserve au 5B). musubi n'entraine PAS sur du GGUF. "
+                 "--offload_inactive_dit demande ~96 Go de RAM ; sinon remplace par --blocks_to_swap 20. "
+                 "Pour I2V : --task i2v-A14B, --timestep_boundary 0.9 et les DiT I2V.",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/kohya-ss/musubi-tuner/blob/main/docs/wan.md",
+    },
+    "wan22_aitoolkit": {
+        "label": "Wan 2.2 A14B T2V (ai-toolkit, 24 Go)",
+        "base_model": "ai-toolkit/Wan2.2-T2V-A14B-Diffusers-bf16",
+        "resolutions": [(832, 480), (480, 832), (624, 624)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "aitoolkit_generic",
+        "aitoolkit": {"arch": "wan22_14b", "quantize": True, "low_vram": True, "num_frames": 1,
+                      "qtype": "uint4|ostris/accuracy_recovery_adapters/wan22_14b_t2i_torchao_uint4.safetensors",
+                      "model_kwargs": {"train_high_noise": True, "train_low_noise": True},
+                      "train_extra": {"switch_boundary_every": 10, "timestep_type": "linear"}},
+        "folder_naming": "flat",
+        "default_repeats": None,
+        "default_epochs": 12,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 1e-4,
+        "category": "video",
+        "notes": "Config calquee sur config/examples/train_lora_wan22_14b_24gb.yaml. "
+                 "Wan 2.5 / 2.6 / 2.7 = API seulement, pas de poids : impossible d'y entrainer un LoRA.",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/ostris/ai-toolkit",
+    },
+    "hunyuan15_musubi": {
+        "label": "HunyuanVideo 1.5 T2V (musubi-tuner)",
+        "base_model": "hunyuanvideo1.5_t2v.safetensors",
+        "resolutions": [(848, 480), (480, 848), (640, 640)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "musubi_generic",
+        "musubi": {
+            "prefix": "hv_1_5",
+            "paths": {"DIT": "hunyuanvideo1.5_t2v.safetensors", "VAE": "hunyuanvideo15_vae.safetensors",
+                      "TE": "qwen_2.5_vl_7b.safetensors", "BYT5": "byt5_small_glyphxl.safetensors"},
+            "latents_args": '--vae "%VAE%"',
+            "te_args": '--text_encoder "%TE%" --byt5 "%BYT5%" --batch_size 16',
+            "train_args": ('--dit "%DIT%" --vae "%VAE%" --text_encoder "%TE%" --byt5 "%BYT5%" '
+                           '--task t2v --timestep_sampling shift --weighting_scheme none '
+                           '--discrete_flow_shift 2.0'),
+            "network_module": "networks.lora_hv_1_5",
+        },
+        "folder_naming": "flat",
+        "default_repeats": 1,
+        "default_epochs": 16,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 1e-4,
+        "category": "video",
+        "notes": "Pour ComfyUI : convertis le LoRA avec networks/convert_hunyuan_video_1_5_lora_to_comfy.py.",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/kohya-ss/musubi-tuner/blob/main/docs/hunyuan_video_1_5.md",
+    },
+    "ltx2_aitoolkit": {
+        "label": "LTX-2.5 22B audio+vidéo (ai-toolkit)",
+        "base_model": "Lightricks/LTX-2.5",
+        # LTX-2 : largeur/hauteur multiples de 32
+        "resolutions": [(960, 544), (544, 960), (768, 768)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "config_format": "aitoolkit_generic",
+        "aitoolkit": {"arch": "ltx2.5", "quantize": True, "low_vram": True, "num_frames": 1},
+        "folder_naming": "flat",
+        "default_repeats": None,
+        "default_epochs": 12,
+        "network_dim": 32,
+        "network_alpha": 32,
+        "learning_rate": 1e-4,
+        "category": "video",
+        "notes": "arch ltx2 / ltx2.3 / ltx2.5 selon ta version. Trainer officiel alternatif : "
+                 "Lightricks/LTX-2 packages/ltx-trainer (dataset CSV/JSONL, frames 8n+1, 32 Go+ VRAM). "
+                 "Captions : un seul paragraphe decrivant image ET son (images = 'silent').",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/Lightricks/LTX-2/tree/main/packages/ltx-trainer",
+    },
+    "minimax_h3_musubi": {
+        "label": "MiniMax-H3 33B image LoRA (musubi-tuner, expérimental)",
+        "base_model": "minimax_h3_fl2va_bf16.safetensors",
+        # H3 : buckets sur une grille de 32 px
+        "resolutions": [(1024, 1024), (1344, 768), (768, 1344)],
+        "crop_strategy": "bucket_face",
+        "captioner": "natural",
+        "caption_suffix": "sound: silence, still image.",
+        "config_format": "musubi_generic",
+        "musubi": {
+            "prefix": "minimax_h3",
+            "paths": {"DIT": "minimax_h3_fl2va_bf16.safetensors",
+                      "VIDEO_VAE": "minimax_h3_video_vae_fp16.safetensors",
+                      "AUDIO_VAE": "minimax_h3_audio_vae_fp32.safetensors",
+                      "TE": "qwen3vl_32b_minimax_h3_bf16.safetensors",
+                      "ADAPTER": "minimax_h3_training_adapter.safetensors"},
+            "latents_args": ('--task t2va --one_frame --video_vae "%VIDEO_VAE%" '
+                             '--audio_vae "%AUDIO_VAE%" --cache_seed 42 --skip_existing'),
+            "te_args": '--task t2va --one_frame --text_encoder "%TE%" --text_cache_dtype bf16 --skip_existing',
+            "train_args": ('--task t2va --one_frame --video_only --dit "%DIT%" '
+                           '--base_weights "%ADAPTER%" --blocks_to_swap 48'),
+            "network_module": "networks.lora_minimax_h3",
+            "no_te_batch": True,
+        },
+        "folder_naming": "flat",
+        "default_repeats": 1,
+        "default_epochs": 16,
+        "network_dim": 16,
+        "network_alpha": 16,
+        "learning_rate": 1e-4,
+        "category": "video",
+        "notes": "Checkpoint CFG-distille : un entrainement flow-matching 'nu' le detruit en ~50 steps. "
+                 "Le .bat utilise un adaptateur de de-distillation (--base_weights, ex. "
+                 "circlestone-labs/MiniMax-H3-Image-Training-Adapter). batch_size=1 impose. "
+                 "LICENCE : verifie ton pays, la MiniMax H3 Community License exclurait l'UE, "
+                 "le Royaume-Uni, la Coree du Sud et les USA (non verifie sur le texte officiel).",
+        "verified": "2026-09-28",
+        "trainer_doc_url": "https://github.com/kohya-ss/musubi-tuner/blob/main/docs/minimax_h3.md",
+    },
+
     # ===========================================================
-    # VIDEO (suite)
+    # LEGACY (2023-2024) - gardes pour compatibilite
     # ===========================================================
     "wan21_musubi": {
         "label": "Wan 2.1 vidéo (musubi-tuner)",
@@ -276,7 +588,7 @@ TARGETS = {
         "network_dim": 32,
         "network_alpha": 32,
         "learning_rate": 2e-4,
-        "category": "video",
+        "category": "legacy",
         "trainer_doc_url": "https://github.com/kohya-ss/musubi-tuner",
     },
     "ltx_video_diffpipe": {
@@ -293,7 +605,7 @@ TARGETS = {
         "network_dim": 32,
         "network_alpha": 32,
         "learning_rate": 3e-4,
-        "category": "video",
+        "category": "legacy",
         "trainer_doc_url": "https://github.com/Lightricks/LTX-Video",
     },
     "cogvideox_diffpipe": {
@@ -310,7 +622,7 @@ TARGETS = {
         "network_dim": 64,
         "network_alpha": 64,
         "learning_rate": 1e-3,
-        "category": "video",
+        "category": "legacy",
         "trainer_doc_url": "https://github.com/a-r-r-o-w/cogvideox-factory",
     },
     "mochi_diffpipe": {
@@ -326,7 +638,7 @@ TARGETS = {
         "network_dim": 32,
         "network_alpha": 32,
         "learning_rate": 2e-4,
-        "category": "video",
+        "category": "legacy",
         "trainer_doc_url": "https://github.com/genmoai/mochi",
     },
     "open_sora_diffpipe": {
@@ -342,7 +654,7 @@ TARGETS = {
         "network_dim": 32,
         "network_alpha": 32,
         "learning_rate": 2e-4,
-        "category": "video",
+        "category": "legacy",
         "trainer_doc_url": "https://github.com/hpcaitech/Open-Sora",
     },
 }
@@ -350,10 +662,34 @@ TARGETS = {
 
 # Categories pour grouper dans la GUI
 TARGET_CATEGORIES = {
-    "image_photo":     "📸 Photo réaliste",
+    "image_modern":    "✨ Image 2025-2026 (FLUX.2 / Qwen-Image / Z-Image / Chroma)",
+    "video":           "🎬 Vidéo 2025-2026 (Wan 2.2 / HunyuanVideo 1.5 / LTX-2 / MiniMax-H3)",
+    "image_photo":     "📸 Photo réaliste (SDXL / FLUX.1)",
     "image_anime":     "🎨 Anime/Style (SDXL forks)",
-    "video":           "🎬 Vidéo",
+    "legacy":          "🗄 Legacy (anciens modèles, compatibilité)",
     "default":         "🖼  Autre",
+}
+
+# Ordre d'affichage dans la GUI
+CATEGORY_ORDER = ["image_modern", "video", "image_photo", "image_anime", "legacy"]
+
+
+# Modeles "a la mode" pour lesquels AUCUN export depuis un dataset photo n'a de
+# sens : poids fermes, pas de trainer LoRA, ou trainer qui exige de la video.
+# Affiche dans la GUI pour que l'utilisateur ne cherche pas en vain.
+NOT_EXPORTABLE = {
+    "FramePack / FramePack-F1":
+        "musubi-tuner n'accepte que des datasets VIDEO pour FramePack ; le mode "
+        "'one frame' exige des paires image de depart -> image cible (control_directory). "
+        "Un dataset photo seul ne peut pas l'entrainer.",
+    "Wan 2.5 / 2.6 / 2.7":
+        "API seulement : aucun poids ouvert publie par Wan-Video, donc aucun LoRA possible. "
+        "Utilise Wan 2.2.",
+    "MiniMax Hailuo 02 / image-01":
+        "Modeles fermes (API). Seul MiniMax-H3 a des poids ouverts (target minimax_h3_musubi).",
+    "HunyuanImage 3.0":
+        "Poids ouverts (80B MoE) mais aucun trainer LoRA (musubi, ai-toolkit, diffusion-pipe, "
+        "OneTrainer) ne le supporte au 2026-09-28.",
 }
 
 
@@ -534,6 +870,8 @@ def prepare_lora_folder(analysis_data, source_folder, output_folder,
             q_prefix = cfg.get("quality_prefix")
         caption = _build_caption(img, persona_name, use_captioner,
                                   quality_prefix=q_prefix)
+        if cfg.get("caption_suffix"):
+            caption = f"{caption.rstrip().rstrip('.')}. {cfg['caption_suffix']}"
         (images_folder / f"{out_name[:-4]}.txt").write_text(caption, encoding="utf-8")
         written += 1
 
@@ -661,6 +999,18 @@ def _write_trainer_config(target, cfg, persona_name, repeats, output_folder, ima
         return path
     elif fmt == "onetrainer_hint":
         return None
+    elif fmt == "musubi_generic":
+        path = output_folder / "musubi_dataset.toml"
+        path.write_text(_musubi_generic_toml(cfg, repeats, output_folder, images_folder),
+                        encoding="utf-8")
+        (output_folder / f"launch_{target}.bat").write_text(
+            _musubi_generic_bat(target, cfg, persona_name, output_folder), encoding="utf-8")
+        return path
+    elif fmt == "aitoolkit_generic":
+        path = output_folder / f"ai_toolkit_{target}.yaml"
+        path.write_text(_aitoolkit_generic_yaml(cfg, persona_name, output_folder, images_folder),
+                        encoding="utf-8")
+        return path
     # ===== SDXL forks (Pony / Illustrious / NoobAI) =====
     # Ils utilisent le meme format Kohya SDXL standard, deja gere par kohya_toml
     # ===== Nouveaux formats =====
@@ -955,11 +1305,16 @@ STRUCTURE
     {persona_name}_001.png
     {persona_name}_001.txt   (caption avec trigger word « {persona_name} »)
     ...
-{('kohya_config.toml' if 'kohya' in cfg['config_format'] else
+{(f'launch_{target}.bat + musubi_dataset.toml' if cfg['config_format'] == 'musubi_generic' else
+  f'ai_toolkit_{target}.yaml' if cfg['config_format'] == 'aitoolkit_generic' else
+  'kohya_config.toml' if 'kohya' in cfg['config_format'] else
   'ai_toolkit_config.yaml' if 'aitoolkit' in cfg['config_format'] else
   'musubi_dataset.toml + launch_musubi.bat' if 'musubi' in cfg['config_format'] else
   'diffusion_pipe_config.toml' if 'diffpipe' in cfg['config_format'] else
   '(pas de config auto - se configure dans la GUI OneTrainer)')}
+
+NOTES MODELE (verifie le {cfg.get('verified', '?')})
+{cfg.get('notes', '-')}
 
 TRIGGER WORD : {persona_name}
 Pour invoquer le LoRA, ajoute « {persona_name} » dans tes prompts.
@@ -1314,8 +1669,174 @@ lr = {cfg['learning_rate']}
 """
 
 
+# ============================================================
+# GENERATEURS GENERIQUES (targets 2025-2026)
+# Un seul generateur par trainer, pilote par les cles "musubi" / "aitoolkit"
+# du target : ajouter un modele = ajouter une entree dans TARGETS.
+# ============================================================
+
+def _fwd(p):
+    return str(p).replace(chr(92), '/')
+
+
+def _musubi_generic_toml(cfg, repeats, output_folder, images_folder):
+    """Dataset config musubi-tuner (schema commun docs/dataset_config.md)."""
+    res = max(cfg["resolutions"], key=lambda r: r[0] * r[1])
+    return f"""# Dataset config musubi-tuner - {cfg['label']}
+# Genere {datetime.now().strftime('%Y-%m-%d %H:%M')} - doc : {cfg['trainer_doc_url']}
+[general]
+resolution = [{res[0]}, {res[1]}]
+caption_extension = ".txt"
+batch_size = 1
+enable_bucket = true
+bucket_no_upscale = false
+
+[[datasets]]
+image_directory = "{_fwd(images_folder)}"
+cache_directory = "{_fwd(output_folder / 'cache')}"
+num_repeats = {repeats or 1}
+"""
+
+
+def _musubi_generic_bat(target, cfg, persona_name, output_folder):
+    m = cfg["musubi"]
+    pre = m["prefix"]
+    toml = output_folder / "musubi_dataset.toml"
+    sets = "\n".join(f'set {k}=C:\\AI\\models\\{v}' for k, v in m["paths"].items())
+    if m.get("model_version"):
+        sets += f'\nset MODEL_VERSION={m["model_version"]}'
+    notes = "\n".join(f":: {line}" for line in _wrap(cfg.get("notes", ""), 90))
+    return f"""@echo off
+:: musubi-tuner - {cfg['label']} - persona {persona_name}
+:: Genere {datetime.now().strftime('%Y-%m-%d %H:%M')} (commandes verifiees le {cfg.get('verified', '?')})
+:: Doc : {cfg['trainer_doc_url']}
+{notes}
+::
+:: >>> ADAPTE les chemins ci-dessous a tes fichiers (noms indicatifs) <<<
+set MUSUBI_DIR=C:\\AI\\musubi-tuner
+{sets}
+
+cd /d %MUSUBI_DIR%
+
+echo [1/3] Cache des latents...
+python src\\musubi_tuner\\{pre}_cache_latents.py --dataset_config "{toml}" {m['latents_args']}
+if errorlevel 1 goto :fail
+
+echo [2/3] Cache de l'encodeur texte...
+python src\\musubi_tuner\\{pre}_cache_text_encoder_outputs.py --dataset_config "{toml}" {m['te_args']}
+if errorlevel 1 goto :fail
+
+echo [3/3] Entrainement LoRA...
+accelerate launch --num_cpu_threads_per_process 1 --mixed_precision bf16 src\\musubi_tuner\\{pre}_train_network.py ^
+  --dataset_config "{toml}" ^
+  {m['train_args']} ^
+  --sdpa --mixed_precision bf16 --gradient_checkpointing ^
+  --optimizer_type adamw8bit --learning_rate {cfg['learning_rate']} ^
+  --max_data_loader_n_workers 2 --persistent_data_loader_workers ^
+  --network_module {m['network_module']} --network_dim {cfg['network_dim']} --network_alpha {cfg['network_alpha']} ^
+  --max_train_epochs {cfg['default_epochs']} --save_every_n_epochs 1 --seed 42 ^
+  --output_dir "{output_folder}\\output" --output_name {persona_name}_{target}
+if errorlevel 1 goto :fail
+echo Termine : {output_folder}\\output
+pause
+exit /b 0
+
+:fail
+echo ECHEC - lis le message ci-dessus (chemin de modele faux ? VRAM ?)
+pause
+exit /b 1
+"""
+
+
+def _wrap(text, width):
+    words, lines, cur = (text or "").split(), [], ""
+    for w in words:
+        if len(cur) + len(w) + 1 > width:
+            lines.append(cur)
+            cur = w
+        else:
+            cur = f"{cur} {w}".strip()
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def _aitoolkit_generic_yaml(cfg, persona_name, output_folder, images_folder):
+    """Config ai-toolkit (ostris) au format actuel : model.arch + name_or_path."""
+    a = cfg["aitoolkit"]
+    # ai-toolkit bucketise par AIRE : resolution = cote du carre equivalent
+    # (832x480 -> 640). Les images sont deja croppees aux buckets du target.
+    sides = sorted({int(round((w * h) ** 0.5 / 64) * 64) for w, h in cfg["resolutions"]})
+    model_lines = [f'name_or_path: "{cfg["base_model"]}"', f"arch: '{a['arch']}'",
+                   f"quantize: {str(a.get('quantize', True)).lower()}"]
+    if a.get("qtype"):
+        model_lines.append(f'qtype: "{a["qtype"]}"')
+    model_lines.append("quantize_te: true")
+    model_lines.append('qtype_te: "qfloat8"')
+    model_lines.append(f"low_vram: {str(a.get('low_vram', False)).lower()}")
+    if a.get("model_kwargs"):
+        model_lines.append("model_kwargs:")
+        model_lines += [f"  {k}: {str(v).lower()}" for k, v in a["model_kwargs"].items()]
+    model_block = "\n".join("        " + l for l in model_lines)
+    extra_train = "".join(f"\n        {k}: {v if not isinstance(v, str) else repr(v)}"
+                          for k, v in (a.get("train_extra") or {}).items())
+    frames = f"\n          num_frames: {a['num_frames']}" if a.get("num_frames") else ""
+    notes = "\n".join(f"# {line}" for line in _wrap(cfg.get("notes", ""), 90))
+    return f"""# ai-toolkit (ostris) - {cfg['label']} - persona {persona_name}
+# Genere {datetime.now().strftime('%Y-%m-%d %H:%M')} (arch verifiee le {cfg.get('verified', '?')})
+{notes}
+# Lance : python run.py <ce_fichier>.yaml   (ou importe-le dans l'UI ai-toolkit)
+job: extension
+config:
+  name: "{persona_name}_{a['arch'].replace('.', '_')}_lora"
+  process:
+    - type: 'sd_trainer'
+      training_folder: "{_fwd(output_folder / 'output')}"
+      device: cuda:0
+      trigger_word: "{persona_name}"
+      network:
+        type: "lora"
+        linear: {cfg['network_dim']}
+        linear_alpha: {cfg['network_alpha']}
+      save:
+        dtype: bf16
+        save_every: 250
+        max_step_saves_to_keep: 4
+      datasets:
+        - folder_path: "{_fwd(images_folder)}"
+          caption_ext: "txt"
+          caption_dropout_rate: 0.05
+          resolution: {sides}{frames}
+      train:
+        batch_size: 1
+        steps: 2500
+        gradient_accumulation: 1
+        train_unet: true
+        train_text_encoder: false
+        gradient_checkpointing: true
+        noise_scheduler: "flowmatch"
+        optimizer: "adamw8bit"
+        lr: {cfg['learning_rate']}
+        dtype: bf16
+        cache_text_embeddings: true{extra_train}
+      model:
+{model_block}
+"""
+
+
 def _launch_instructions(target, cfg, persona_name, output_folder):
     fmt = cfg["config_format"]
+    if fmt == "musubi_generic":
+        return ("1. Installe musubi-tuner : git clone https://github.com/kohya-ss/musubi-tuner\n"
+                f"2. Edite launch_{target}.bat : MUSUBI_DIR + chemins des modeles (lignes 'set')\n"
+                f"3. Double-clic launch_{target}.bat (cache latents -> cache texte -> training)\n"
+                f"4. Sortie : output/{persona_name}_{target}.safetensors")
+    if fmt == "aitoolkit_generic":
+        return ("1. Installe ai-toolkit : git clone https://github.com/ostris/ai-toolkit\n"
+                f"2. python run.py <chemin>/ai_toolkit_{target}.yaml\n"
+                "   (ou UI ai-toolkit > New Job > colle le YAML)\n"
+                "3. Modeles telecharges depuis HuggingFace au premier lancement\n"
+                "4. Sortie : output/")
     if fmt == "kohya_toml":
         return (
             "1. Lance Kohya SS GUI (LoRA)\n"
